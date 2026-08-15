@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { motion, useScroll, useTransform } from "motion/react";
+import { useScroll, useTransform } from "motion/react";
+import * as m from "motion/react-m";
 
 /** Hard ceiling from the motion spec — parallax stays a hint, not an effect. */
 const MAX_OFFSET = 40;
@@ -36,9 +37,9 @@ export function Parallax({
 
   return (
     <div ref={ref} className={className}>
-      <motion.div data-motion className="will-change-transform" style={{ y }}>
+      <m.div data-motion className="will-change-transform" style={{ y }}>
         {children}
-      </motion.div>
+      </m.div>
     </div>
   );
 }

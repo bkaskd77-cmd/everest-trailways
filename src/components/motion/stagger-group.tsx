@@ -1,9 +1,10 @@
 "use client";
 
-import { motion, type Variants } from "motion/react";
+import { type Variants } from "motion/react";
 
 import { STAGGER, staggerContainer } from "@/lib/motion";
 import { StaggerContext } from "@/components/motion/stagger-context";
+import * as m from "motion/react-m";
 
 type StaggerGroupElement = "div" | "section" | "ul" | "ol" | "article";
 
@@ -30,7 +31,7 @@ export function StaggerGroup({
   stagger = STAGGER,
   delay = 0,
 }: StaggerGroupProps) {
-  const Component = motion[as] as typeof motion.div;
+  const Component = m[as] as typeof m.div;
 
   const variants: Variants = {
     ...staggerContainer,

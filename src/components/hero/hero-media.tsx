@@ -2,17 +2,13 @@
 
 import * as React from "react";
 import Image from "next/image";
-import {
-  motion,
-  useMotionValue,
-  useTransform,
-  type MotionValue,
-} from "motion/react";
+import { useMotionValue, useTransform, type MotionValue } from "motion/react";
 
 import type { HeroSlide } from "@/content/hero-slides";
 import { BASE_IMAGE_FILTER } from "@/lib/hero-scrim";
 import { EASE } from "@/lib/motion";
 import { CROSSFADE } from "@/components/hero/use-hero-carousel";
+import * as m from "motion/react-m";
 
 const KEN_BURNS_SCALE = 1.08;
 /** Peak drift in px. Stays inside the 6% bleed below, even at 360px wide. */
@@ -60,7 +56,7 @@ export function HeroMedia({
   const y = useTransform(local, [0, 1], [0, DRIFT * direction]);
 
   return (
-    <motion.div
+    <m.div
       data-hero-slide
       data-active={active}
       aria-hidden={!active}
@@ -71,7 +67,7 @@ export function HeroMedia({
       style={{ zIndex: active ? 2 : 1 }}
     >
       {load ? (
-        <motion.div
+        <m.div
           data-motion
           className="absolute -inset-[6%] will-change-transform"
           style={{ scale, x, y }}
@@ -96,8 +92,8 @@ export function HeroMedia({
                 : BASE_IMAGE_FILTER,
             }}
           />
-        </motion.div>
+        </m.div>
       ) : null}
-    </motion.div>
+    </m.div>
   );
 }

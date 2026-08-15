@@ -14,16 +14,27 @@
  * that would fix it.
  */
 
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import jpeg from "jpeg-js";
+
+/** `--tune` writes the computed strengths back into the content file. */
+const TUNE = process.argv.includes("--tune");
 
 import { heroSlides, type HeroSlide } from "../src/content/hero-slides.ts";
 import {
   CONTRAST_TARGETS,
+  HEADER_SCRIM,
+  MAX_BACKDROP_LUMINANCE,
   moodAlphaAt,
   shadowAlpha,
 } from "../src/lib/hero-scrim.ts";
+
+/** Mirrors HeroMedia. */
+const KEN_BURNS_SCALE = 1.08;
+const KEN_BURNS_DRIFT = 20;
+/** Start, middle and end of the pan. The worst of the three is what counts. */
+const KEN_BURNS_SAMPLES = [0, 0.5, 1];
 
 /* ------------------------------------------------------------------ layout */
 
@@ -149,9 +160,82 @@ function layout(slide: HeroSlide, vw: number, vh: number) {
     x0: left,
     x1: left + subline.width,
   });
+  y += sublineH + 36;
+  // The ghost button's label and border. Its own box-shadow protects it, but
+  // it still has to clear the same target as any other small text.
+  bands.push({
+    name: "cta-ghost",
+    y0: y,
+    y1: y + ctaH,
+    x0: left + 190,
+    x1: left + 190 + 210,
+  });
+
+  /* Chrome over the photograph. All of it uses the `small` shadow stack and the
+     hairline opacity floor, so it is measured against the small-text target. */
+  const headerMid = 44;
+  bands.push({
+    name: "wordmark",
+    y0: headerMid - 8,
+    y1: headerMid + 8,
+    x0: left,
+    x1: left + (vw >= 1024 ? 190 : 140),
+  });
+  if (vw >= 1024) {
+    bands.push({
+      name: "nav-links",
+      y0: headerMid - 9,
+      y1: headerMid + 9,
+      x0: vw * 0.42,
+      x1: vw * 0.62,
+    });
+    bands.push({
+      name: "currency",
+      y0: headerMid - 8,
+      y1: headerMid + 8,
+      x0: vw - gutter - Math.max(0, (vw - 1440) / 2) - 300,
+      x1: vw - gutter - Math.max(0, (vw - 1440) / 2) - 262,
+    });
+  }
+  bands.push({
+    name: "theme-toggle",
+    y0: headerMid - 16,
+    y1: headerMid + 16,
+    x0: vw - gutter - Math.max(0, (vw - 1440) / 2) - 250,
+    x1: vw - gutter - Math.max(0, (vw - 1440) / 2) - 218,
+  });
+
+  // Indicators and scroll cue, bottom-28.
+  const controlsY = vh - 112 - 40;
+  bands.push({
+    name: "indicators",
+    y0: controlsY,
+    y1: controlsY + 40,
+    x0: left,
+    x1: left + (vw >= 640 ? 88 : 56),
+  });
+  if (vw >= 640) {
+    bands.push({
+      name: "scroll-cue",
+      y0: controlsY - 50,
+      y1: controlsY + 40,
+      x0: vw - gutter - Math.max(0, (vw - 1440) / 2) - 40,
+      x1: vw - gutter - Math.max(0, (vw - 1440) / 2),
+    });
+  }
 
   return { box, bands, ridgeTop: vh * 0.7 };
 }
+
+/** Roles measured against the large-text target. Everything else is small. */
+const LARGE_TEXT = new Set(["headline"]);
+/** Roles that sit under the header's own top-down scrim. */
+const UNDER_HEADER_SCRIM = new Set([
+  "wordmark",
+  "nav-links",
+  "currency",
+  "theme-toggle",
+]);
 
 /* ------------------------------------------------------------------ colour */
 
@@ -235,27 +319,45 @@ function backdropLuminance(
   vw: number,
   vh: number,
   strength: number,
+  /** Ken Burns position, 0 → 1. The pixels under the copy move as it plays. */
+  t: number,
 ) {
   const filter = slide.imageFilter
     ? `brightness(1.08) contrast(1.03) ${slide.imageFilter}`
     : "brightness(1.08) contrast(1.03)";
 
-  // The media layer is inset -6% and covers, matching HeroMedia.
+  // The media layer is inset -6% and covers, matching HeroMedia — then Ken
+  // Burns scales it 1 → 1.08 about its centre and drifts it by DRIFT px.
+  const kb = 1 + t * (KEN_BURNS_SCALE - 1);
+  const direction = heroSlides.indexOf(slide) % 2 === 0 ? -1 : 1;
+  const driftX = t * KEN_BURNS_DRIFT * direction;
+  const driftY = t * KEN_BURNS_DRIFT * direction;
+
   const mediaW = vw * 1.12;
   const mediaH = vh * 1.12;
-  const scale = Math.max(mediaW / img.width, mediaH / img.height);
+  const baseScale = Math.max(mediaW / img.width, mediaH / img.height);
+  const scale = baseScale * kb;
   const drawW = img.width * scale;
   const drawH = img.height * scale;
   const focalY = slide.focalPoint?.match(/(\d+)%/);
   const posY = focalY ? Number(focalY[1]) / 100 : 0.5;
-  const offX = -vw * 0.06 + (mediaW - drawW) * 0.5;
-  const offY = -vh * 0.06 + (mediaH - drawH) * posY;
+  // Cover offsets at rest, then re-centre for the zoom and apply the drift.
+  const restX = -vw * 0.06 + (mediaW - img.width * baseScale) * 0.5;
+  const restY = -vh * 0.06 + (mediaH - img.height * baseScale) * posY;
+  const centreX = restX + (img.width * baseScale) / 2;
+  const centreY = restY + (img.height * baseScale) / 2;
+  const offX = centreX - drawW / 2 + driftX;
+  const offY = centreY - drawH / 2 + driftY;
 
   const samples: { rgb: number[]; lum: number }[] = [];
   const shadow = shadowAlpha(
-    band.name === "headline" ? "display" : "small",
+    LARGE_TEXT.has(band.name) ? "display" : "small",
     strength,
   );
+  const headerScrim = UNDER_HEADER_SCRIM.has(band.name)
+    ? HEADER_SCRIM.alpha *
+      Math.max(0, 1 - (band.y0 + band.y1) / 2 / HEADER_SCRIM.height)
+    : 0;
 
   for (let y = band.y0; y < band.y1; y += SAMPLE_STEP) {
     for (let x = band.x0; x < band.x1; x += SAMPLE_STEP) {
@@ -267,7 +369,8 @@ function backdropLuminance(
         [img.data[i], img.data[i + 1], img.data[i + 2]],
         filter,
       );
-      const alpha = 1 - (1 - moodAlphaAt(x, y, vw, vh)) * (1 - shadow);
+      const alpha =
+        1 - (1 - moodAlphaAt(x, y, vw, vh)) * (1 - shadow) * (1 - headerScrim);
       const rgb = pixel.map((c, k) => c * (1 - alpha) + SUMMIT[k] * alpha);
       samples.push({ rgb, lum: luminance(rgb) });
     }
@@ -320,40 +423,53 @@ async function main() {
 
       for (const band of bands) {
         const role = band.name;
-        const isSmall = role !== "headline";
-        const target = isSmall
-          ? CONTRAST_TARGETS.smallText
-          : CONTRAST_TARGETS.largeText;
+        const target = LARGE_TEXT.has(role)
+          ? CONTRAST_TARGETS.largeText
+          : CONTRAST_TARGETS.smallText;
         const textAlpha =
-          role === "eyebrow" ? 0.85 : role === "subline" ? 0.8 : 1;
+          role === "subline" ? 0.9 : role === "indicators" ? 0.75 : 1;
 
+        /**
+         * Worst of three points in the Ken Burns cycle. The image scales and
+         * pans continuously, so a slide that passes at rest can fail halfway
+         * through as a bright area drifts under the copy.
+         */
         const measure = (strength: number) => {
-          const result = backdropLuminance(
-            img,
-            slide,
-            band,
-            bp.w,
-            bp.h,
-            strength,
-          );
-          if (!result) return { ratio: Infinity, worstRatio: Infinity };
-          // Translucent text blends with the backdrop it sits on, so the
-          // foreground colour is computed against that exact pixel.
-          const ratioAt = (s: { rgb: number[]; lum: number }) =>
-            contrast(luminance(over(GLACIER, s.rgb, textAlpha)), s.lum);
-          return {
-            ratio: ratioAt(result.p95),
-            worstRatio: ratioAt(result.worst),
-          };
+          let ratio = Infinity;
+          let worstRatio = Infinity;
+          let peakLum = 0;
+          for (const t of KEN_BURNS_SAMPLES) {
+            const result = backdropLuminance(
+              img,
+              slide,
+              band,
+              bp.w,
+              bp.h,
+              strength,
+              t,
+            );
+            if (!result) continue;
+            // Translucent text blends with the backdrop it sits on, so the
+            // foreground colour is computed against that exact pixel.
+            const ratioAt = (s: { rgb: number[]; lum: number }) =>
+              contrast(luminance(over(GLACIER, s.rgb, textAlpha)), s.lum);
+            ratio = Math.min(ratio, ratioAt(result.p95));
+            worstRatio = Math.min(worstRatio, ratioAt(result.worst));
+            peakLum = Math.max(peakLum, result.p95.lum);
+          }
+          return { ratio, worstRatio, peakLum };
         };
 
         const base = measure(slide.scrimStrength ?? 1);
-        const status: Row["status"] =
-          base.ratio >= target
-            ? "PASS"
-            : base.ratio >= target * 0.9
-              ? "WARN"
-              : "FAIL";
+        // Both gates: the contrast ratio and the absolute luminance floor.
+        const ok = (m: { ratio: number; peakLum: number }) =>
+          m.ratio >= target && m.peakLum <= MAX_BACKDROP_LUMINANCE;
+        const status: Row["status"] = ok(base)
+          ? "PASS"
+          : base.ratio >= target * 0.9 &&
+              base.peakLum <= MAX_BACKDROP_LUMINANCE * 1.15
+            ? "WARN"
+            : "FAIL";
 
         if (status !== "PASS") {
           // Smallest strength that clears the target. Values above 1 are
@@ -363,13 +479,13 @@ async function main() {
           let lo = slide.scrimStrength ?? 1;
           let hi = 2;
           let found = Infinity;
-          for (let i = 0; i < 12 && lo <= hi; i++) {
+          for (let i = 0; i < 14 && lo <= hi; i++) {
             const mid = (lo + hi) / 2;
-            if (measure(mid).ratio >= target) {
+            if (ok(measure(mid))) {
               found = mid;
-              hi = mid - 0.001;
+              hi = mid - 0.005;
             } else {
-              lo = mid + 0.001;
+              lo = mid + 0.005;
             }
           }
           const prev = needed.get(slide.id) ?? 0;
@@ -391,7 +507,64 @@ async function main() {
 
   print(rows, needed, ridgeNotes);
 
+  if (TUNE) {
+    await writeStrengths(needed);
+    return;
+  }
+
   if (rows.some((r) => r.status === "FAIL")) process.exitCode = 1;
+}
+
+/**
+ * `pnpm tune:hero` — write each slide's minimum passing `scrimStrength` back
+ * into src/content/hero-slides.ts, so correcting new photography is one command
+ * rather than a judgement call.
+ *
+ * Slides that already pass have any stale value removed, so the file never
+ * accumulates corrections an image no longer needs.
+ */
+async function writeStrengths(needed: Map<string, number>) {
+  const file = path.join(process.cwd(), "src/content/hero-slides.ts");
+  let source = await readFile(file, "utf8");
+  const changes: string[] = [];
+
+  for (const slide of heroSlides) {
+    const raw = needed.get(slide.id);
+    const value =
+      raw !== undefined && Number.isFinite(raw)
+        ? Math.ceil(raw * 100) / 100
+        : undefined;
+    const current = slide.scrimStrength;
+    if (value === current) continue;
+
+    // Narrow the edit to this slide's object literal.
+    const start = source.indexOf(`id: "${slide.id}"`);
+    if (start === -1) continue;
+    const next = source.indexOf("\n  {\n", start);
+    const end = next === -1 ? source.length : next;
+    let block = source.slice(start, end);
+
+    block = block.replace(/\n\s*scrimStrength: [\d.]+,/, "");
+    if (value !== undefined) {
+      block = block.replace(
+        /(\n(\s*)ctaPrimary:)/,
+        `\n$2scrimStrength: ${value},$1`,
+      );
+    }
+    source = source.slice(0, start) + block + source.slice(end);
+    changes.push(
+      `${slide.id}: ${current ?? "—"} → ${value ?? "removed (passes unaided)"}`,
+    );
+  }
+
+  if (!changes.length) {
+    console.log("  tune: every slide already carries the right value.\n");
+    return;
+  }
+  await writeFile(file, source, "utf8");
+  console.log("  tune: wrote src/content/hero-slides.ts");
+  for (const c of changes) console.log(`    ${c}`);
+  console.log("\n  Re-run `pnpm check:hero` to confirm.\n");
 }
 
 function print(rows: Row[], needed: Map<string, number>, ridgeNotes: string[]) {

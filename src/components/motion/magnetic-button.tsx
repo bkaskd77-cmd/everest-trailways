@@ -1,15 +1,11 @@
 "use client";
 
 import * as React from "react";
-import {
-  motion,
-  useMotionValue,
-  useReducedMotion,
-  useSpring,
-} from "motion/react";
+import { useMotionValue, useReducedMotion, useSpring } from "motion/react";
 
 import { SPRING } from "@/lib/motion";
 import { cn } from "@/lib/utils";
+import * as m from "motion/react-m";
 
 type MagneticButtonProps = {
   children: React.ReactNode;
@@ -54,7 +50,7 @@ export function MagneticButton({
   };
 
   return (
-    <motion.span
+    <m.span
       ref={ref}
       data-motion
       // `display` stays a class, not an inline style, so callers can still
@@ -68,6 +64,6 @@ export function MagneticButton({
       onBlurCapture={release}
     >
       {children}
-    </motion.span>
+    </m.span>
   );
 }

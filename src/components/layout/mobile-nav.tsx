@@ -3,7 +3,6 @@
 import * as React from "react";
 import Link from "next/link";
 import { Menu } from "lucide-react";
-import { motion } from "motion/react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +15,7 @@ import {
 } from "@/components/ui/sheet";
 import { DURATION, EASE, STAGGER } from "@/lib/motion";
 import { defaultCurrency, primaryNav, siteConfig } from "@/lib/site";
+import * as m from "motion/react-m";
 
 const list = {
   hidden: {},
@@ -79,7 +79,7 @@ export function MobileNav({ inverted }: { inverted: boolean }) {
           </SheetClose>
         </div>
 
-        <motion.nav
+        <m.nav
           data-motion
           variants={list}
           initial="hidden"
@@ -89,7 +89,7 @@ export function MobileNav({ inverted }: { inverted: boolean }) {
         >
           <ul className="flex flex-col gap-1">
             {primaryNav.map((link) => (
-              <motion.li key={link.href} data-motion variants={item}>
+              <m.li key={link.href} data-motion variants={item}>
                 <SheetClose asChild>
                   <Link
                     href={link.href}
@@ -98,11 +98,11 @@ export function MobileNav({ inverted }: { inverted: boolean }) {
                     {link.label}
                   </Link>
                 </SheetClose>
-              </motion.li>
+              </m.li>
             ))}
           </ul>
 
-          <motion.div
+          <m.div
             data-motion
             variants={item}
             className="mt-10 flex items-center gap-4 border-t border-stone/30 pt-8"
@@ -115,8 +115,8 @@ export function MobileNav({ inverted }: { inverted: boolean }) {
                 <Link href="/plan">Plan My Trek</Link>
               </Button>
             </SheetClose>
-          </motion.div>
-        </motion.nav>
+          </m.div>
+        </m.nav>
       </SheetContent>
     </Sheet>
   );

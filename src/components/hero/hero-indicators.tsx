@@ -1,8 +1,10 @@
 "use client";
 
-import { motion, useTransform, type MotionValue } from "motion/react";
+import { useTransform, type MotionValue } from "motion/react";
 
 import type { HeroSlide } from "@/content/hero-slides";
+import { boxShadowCss } from "@/lib/hero-scrim";
+import * as m from "motion/react-m";
 
 function Indicator({
   slide,
@@ -10,12 +12,15 @@ function Indicator({
   active,
   progress,
   onSelect,
+  strength,
 }: {
   slide: HeroSlide;
   index: number;
   active: boolean;
   progress: MotionValue<number>;
   onSelect: () => void;
+  /** The *displayed* slide's correction — these sit over that photograph. */
+  strength?: number;
 }) {
   // Inactive bars sit empty; the active one fills as the timer runs.
   const scaleX = useTransform(progress, (value) => (active ? value : 0));
@@ -32,11 +37,13 @@ function Indicator({
     >
       <span
         data-hero-track
-        className="absolute inset-x-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-glacier/25 transition-colors group-hover:bg-glacier/45"
+        // Opacity floor plus a drop shadow: at 25% these vanished into snow.
+        style={{ boxShadow: boxShadowCss("small", strength) }}
+        className="absolute inset-x-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-glacier/75 transition-colors group-hover:bg-glacier"
       />
-      <motion.span
+      <m.span
         data-hero-progress
-        style={{ scaleX }}
+        style={{ scaleX, boxShadow: boxShadowCss("small", strength) }}
         className="absolute inset-x-0 top-1/2 h-[3px] origin-left -translate-y-1/2 rounded-full bg-glacier"
       />
     </button>
@@ -71,6 +78,7 @@ export function HeroIndicators({
           active={i === index}
           progress={progress}
           onSelect={() => onSelect(i)}
+          strength={slides[index]?.scrimStrength}
         />
       ))}
     </div>

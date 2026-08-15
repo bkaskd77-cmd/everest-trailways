@@ -52,11 +52,35 @@ export const TEXT_SHADOWS = {
     { dy: 4, blur: 40, alpha: 0.3 },
   ] as Shadow[],
   small: [
-    { dy: 1, blur: 1, alpha: 0.9 },
-    { dy: 1, blur: 6, alpha: 0.65 },
-    { dy: 2, blur: 24, alpha: 0.42 },
+    { dy: 1, blur: 1, alpha: 0.95 },
+    { dy: 1, blur: 5, alpha: 0.78 },
+    { dy: 2, blur: 20, alpha: 0.52 },
   ] as Shadow[],
 };
+
+/**
+ * Chrome over the photograph — wordmark, nav, indicators, scroll cue. Same
+ * structure as `small`, because they are all small text or hairlines and fail
+ * in the same place: a bright frame.
+ */
+export const OVERLAY_SHADOW = TEXT_SHADOWS.small;
+
+/**
+ * Minimum opacity for a hairline drawn over photography (indicator tracks, the
+ * ghost button's border, the scroll rule). Below this they dissolve into snow.
+ */
+export const HAIRLINE_MIN_OPACITY = 0.75;
+
+/** Header scrim: summit at the very top, gone by 120px. */
+export const HEADER_SCRIM = { alpha: 0.35, height: 120 };
+
+export function headerScrimCss(): string {
+  return (
+    `linear-gradient(to bottom, rgb(${SCRIM_RGB} / ${HEADER_SCRIM.alpha}) 0%, ` +
+    `rgb(${SCRIM_RGB} / ${(HEADER_SCRIM.alpha * 0.4).toFixed(3)}) 45%, ` +
+    `rgb(${SCRIM_RGB} / 0) 100%)`
+  );
+}
 
 /** Applied to every slide image. */
 export const BASE_IMAGE_FILTER = "brightness(1.08) contrast(1.03)";
@@ -70,6 +94,16 @@ export const CONTRAST_TARGETS = {
   smallText: 4.6,
   largeText: 3.2,
 };
+
+/**
+ * Luminance floor. However bright the photograph, the effective backdrop under
+ * the copy must sit below this — a contrast ratio alone can be satisfied by a
+ * backdrop that is still glaringly bright, and glare is what makes a hero feel
+ * cheap. `pnpm tune:hero` solves each slide's `scrimStrength` against both this
+ * and the contrast targets, so the floor adapts to the image rather than being
+ * a value anyone has to pick.
+ */
+export const MAX_BACKDROP_LUMINANCE = 0.26;
 
 /** CSS for the mood layer. */
 export function moodGradientCss(): string {

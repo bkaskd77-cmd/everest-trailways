@@ -1,8 +1,7 @@
 "use client";
 
-import { motion } from "motion/react";
-
 import { revealMask, withDelay } from "@/lib/motion";
+import * as m from "motion/react-m";
 
 type TextRevealProps = {
   /** One entry per line. Lines are revealed in order from behind a mask. */
@@ -67,7 +66,7 @@ export function TextReveal({
         // The clipping box. `pb` leaves room for descenders so they are not
         // shaved off by the mask.
         <span key={line} className="block overflow-hidden pb-[0.08em]">
-          <motion.span
+          <m.span
             data-motion
             className="block"
             variants={withDelay(revealMask, delay + index * stagger)}
@@ -75,7 +74,7 @@ export function TextReveal({
             {...play}
           >
             {line}
-          </motion.span>
+          </m.span>
         </span>
       ))}
     </Component>

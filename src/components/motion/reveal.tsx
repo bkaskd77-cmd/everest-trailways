@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { motion, type Variants } from "motion/react";
+import { type Variants } from "motion/react";
 
 import { fadeUp, withDelay } from "@/lib/motion";
 import { StaggerContext } from "@/components/motion/stagger-context";
+import * as m from "motion/react-m";
 
 type RevealElement = "div" | "section" | "article" | "li" | "span" | "p";
 
@@ -33,7 +34,7 @@ export function Reveal({
   variants = fadeUp,
 }: RevealProps) {
   const staggered = React.useContext(StaggerContext);
-  const Component = motion[as] as typeof motion.div;
+  const Component = m[as] as typeof m.div;
   const resolved = withDelay(variants, delay);
 
   // Inside a StaggerGroup the parent owns the trigger; a second one would

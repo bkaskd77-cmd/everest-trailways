@@ -13,7 +13,13 @@ import { Button } from "@/components/ui/button";
  * identical on server and client, so there is nothing to mismatch and no
  * mounted-flag flicker.
  */
-export function ThemeToggle({ className }: { className?: string }) {
+export function ThemeToggle({
+  className,
+  style,
+}: {
+  className?: string;
+  style?: React.CSSProperties;
+}) {
   const { resolvedTheme, setTheme } = useTheme();
 
   return (
@@ -21,6 +27,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       variant="ghost"
       size="icon-sm"
       className={className}
+      style={style}
       aria-label="Toggle colour theme"
       onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
     >

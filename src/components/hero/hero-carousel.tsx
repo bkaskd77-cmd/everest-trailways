@@ -125,10 +125,10 @@ export function HeroCarousel() {
           midpoint so it reads as a dissolve rather than a band. */}
       <div
         aria-hidden
-        className="absolute inset-x-0 bottom-0 z-10 h-24"
+        className="absolute inset-x-0 bottom-0 z-10 h-16"
         style={{
           backgroundImage:
-            "linear-gradient(to bottom, transparent 0%, color-mix(in srgb, var(--color-background) 40%, transparent) 62%, var(--color-background) 100%)",
+            "linear-gradient(to bottom, transparent 0%, color-mix(in srgb, var(--color-background) 18%, transparent) 65%, color-mix(in srgb, var(--color-background) 55%, transparent) 100%)",
         }}
       />
 
@@ -153,7 +153,7 @@ export function HeroCarousel() {
           onSelect={goTo}
         />
         <div className="hidden sm:block">
-          <ScrollCue />
+          <ScrollCue strength={slides[index]?.scrimStrength} />
         </div>
       </div>
 

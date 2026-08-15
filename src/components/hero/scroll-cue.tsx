@@ -1,15 +1,20 @@
 "use client";
 
 import * as React from "react";
-import { motion } from "motion/react";
 
 import { DURATION, EASE } from "@/lib/motion";
+import {
+  HAIRLINE_MIN_OPACITY,
+  boxShadowCss,
+  textShadowCss,
+} from "@/lib/hero-scrim";
+import * as m from "motion/react-m";
 
 /**
  * Vertical "SCROLL" label with a light travelling down a 1px rule. Fades out
  * once the reader has clearly started scrolling.
  */
-export function ScrollCue() {
+export function ScrollCue({ strength }: { strength?: number }) {
   const [visible, setVisible] = React.useState(true);
 
   React.useEffect(() => {
@@ -20,10 +25,11 @@ export function ScrollCue() {
   }, []);
 
   return (
-    <motion.div
+    <m.div
       data-motion
       aria-hidden
-      className="pointer-events-none flex flex-col items-center gap-3 text-glacier/70"
+      style={{ textShadow: textShadowCss("small", strength) }}
+      className="pointer-events-none flex flex-col items-center gap-3 text-glacier"
       initial={false}
       animate={{ opacity: visible ? 1 : 0 }}
       transition={{ duration: DURATION.fast, ease: EASE }}
@@ -31,8 +37,16 @@ export function ScrollCue() {
       <span className="text-[0.625rem] tracking-[0.3em] [writing-mode:vertical-rl]">
         SCROLL
       </span>
-      <span className="relative block h-14 w-px overflow-hidden bg-glacier/25">
-        <motion.span
+      <span
+        // The rule is a hairline over photography: it needs both the opacity
+        // floor and a shadow or it disappears on a bright frame.
+        style={{
+          opacity: HAIRLINE_MIN_OPACITY,
+          boxShadow: boxShadowCss("small", strength),
+        }}
+        className="relative block h-14 w-px overflow-hidden bg-glacier"
+      >
+        <m.span
           data-motion
           className="absolute inset-x-0 block h-1/3 bg-glacier"
           initial={{ y: "-100%" }}
@@ -45,6 +59,6 @@ export function ScrollCue() {
           }}
         />
       </span>
-    </motion.div>
+    </m.div>
   );
 }

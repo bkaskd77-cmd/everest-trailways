@@ -1,15 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "motion/react";
 
 import type { HeroSlide } from "@/content/hero-slides";
 import { MagneticButton, TextReveal } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import { DURATION, EASE, STAGGER } from "@/lib/motion";
-import { boxShadowCss, textShadowCss } from "@/lib/hero-scrim";
+import {
+  HAIRLINE_MIN_OPACITY,
+  boxShadowCss,
+  textShadowCss,
+} from "@/lib/hero-scrim";
 import { cn } from "@/lib/utils";
 import { COPY_OFFSET } from "@/components/hero/use-hero-carousel";
+import * as m from "motion/react-m";
 
 const group = {
   hidden: {},
@@ -101,8 +105,14 @@ export function HeroCopy({ slide, index, total, animate }: HeroCopyProps) {
           size="lg"
           // The border and label both carry the shadow, so the button keeps its
           // shape against a bright frame.
-          style={{ ...smallShadow, boxShadow: boxShadowCss("small", strength) }}
-          className="border border-glacier/45 bg-transparent text-glacier hover:bg-glacier/10 hover:text-glacier"
+          style={{
+            ...smallShadow,
+            boxShadow: boxShadowCss("small", strength),
+            // Opacity floor, not a Tailwind class: on snow anything lighter
+            // than this dissolves and the button loses its shape.
+            borderColor: `rgb(245 243 238 / ${HAIRLINE_MIN_OPACITY})`,
+          }}
+          className="border bg-transparent text-glacier hover:bg-glacier/10 hover:text-glacier"
         >
           <Link href={slide.ctaSecondary.href}>{slide.ctaSecondary.label}</Link>
         </Button>
@@ -125,7 +135,7 @@ export function HeroCopy({ slide, index, total, animate }: HeroCopyProps) {
     >
       {animate ? (
         <>
-          <motion.p
+          <m.p
             data-motion
             variants={item}
             initial="hidden"
@@ -135,29 +145,29 @@ export function HeroCopy({ slide, index, total, animate }: HeroCopyProps) {
             className={eyebrowClass}
           >
             {slide.region}
-          </motion.p>
+          </m.p>
 
           {headline}
 
-          <motion.div
+          <m.div
             data-motion
             variants={group}
             initial="hidden"
             animate="visible"
             className="mt-6"
           >
-            <motion.p
+            <m.p
               data-motion
               variants={item}
               style={smallShadow}
               className={sublineClass}
             >
               {slide.subline}
-            </motion.p>
-            <motion.div data-motion variants={item} className={ctaRowClass}>
+            </m.p>
+            <m.div data-motion variants={item} className={ctaRowClass}>
               {actions}
-            </motion.div>
-          </motion.div>
+            </m.div>
+          </m.div>
         </>
       ) : (
         <>
