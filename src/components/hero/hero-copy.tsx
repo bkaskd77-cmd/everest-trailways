@@ -7,6 +7,8 @@ import type { HeroSlide } from "@/content/hero-slides";
 import { MagneticButton, TextReveal } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import { DURATION, EASE, STAGGER } from "@/lib/motion";
+import { textBedCss, textBedInset } from "@/lib/hero-scrim";
+import { cn } from "@/lib/utils";
 import { COPY_OFFSET } from "@/components/hero/use-hero-carousel";
 
 const group = {
@@ -53,9 +55,16 @@ type HeroCopyProps = {
  * replays without any imperative animation control.
  */
 export function HeroCopy({ slide, index, total, animate }: HeroCopyProps) {
+  const centred = slide.textPosition === "center";
   const eyebrowClass = "text-glacier/85 text-xs tracking-[0.24em] uppercase";
-  const sublineClass = "text-glacier/80 max-w-xl text-lg";
-  const ctaRowClass = "mt-9 flex flex-wrap items-center gap-4";
+  const sublineClass = cn(
+    "text-glacier/80 max-w-xl text-lg",
+    centred && "mx-auto",
+  );
+  const ctaRowClass = cn(
+    "mt-9 flex flex-wrap items-center gap-4",
+    centred && "justify-center",
+  );
 
   const headline = (
     <TextReveal
@@ -95,8 +104,26 @@ export function HeroCopy({ slide, index, total, animate }: HeroCopyProps) {
       role="group"
       aria-roledescription="slide"
       aria-label={`Slide ${index + 1} of ${total}`}
-      className="max-w-[60ch]"
+      // `isolate` keeps the bed's negative z-index inside this block, so it can
+      // never slip behind the mood layer.
+      className={cn(
+        "relative isolate max-w-[60ch]",
+        centred && "mx-auto text-center",
+      )}
     >
+      {/* The text bed. Absolutely positioned against this block and inflated
+          off it, so it grows and shrinks with the copy rather than with the
+          viewport. This is the only layer responsible for legibility; per-slide
+          `scrimStrength` scales it. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -z-10"
+        style={{
+          inset: textBedInset(),
+          backgroundImage: textBedCss(slide.scrimStrength ?? 1),
+        }}
+      />
+
       {animate ? (
         <>
           <motion.p

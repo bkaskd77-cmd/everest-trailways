@@ -10,6 +10,7 @@ import { ScrollCue } from "@/components/hero/scroll-cue";
 import { useHeroCarousel } from "@/components/hero/use-hero-carousel";
 import { Parallax } from "@/components/motion";
 import { heroSlides } from "@/content/hero-slides";
+import { moodGradientCss } from "@/lib/hero-scrim";
 
 /** Horizontal travel before a touch drag counts as a swipe. */
 const SWIPE_THRESHOLD = 48;
@@ -99,49 +100,36 @@ export function HeroCarousel() {
         ))}
       </div>
 
-      {/* Scrims, in four passes.
-          A — a flat wash. Heavy below 1280px, where the copy spans most of the
-              frame and there is nowhere bright to put it; light above, where it
-              only occupies the left column.
-          B — the two-stop directional wash the brand calls for: summit at 78%
-              bottom-left to 15% top-right.
-          C — a left-weighted bed, so the contrast is bought where the copy sits
-              rather than by flattening the whole photograph.
-          D — a floor grounding the bottom edge.
-          Tuned by compositing all five photographs under this exact stack and
-          taking the worst pixel inside the text block at 360/768/1024/1280/1440/
-          1920. Worst case is 4.95:1; B on its own measured 2.07:1. Re-measure if
-          any of these numbers move. */}
+      {/* The only full-frame layer: atmosphere. It carries no contrast
+          responsibility — that belongs to the text bed, which lives with the
+          copy in <HeroCopy> and is sized from the copy's own box. Keeping the
+          two apart is what lets the right of the frame stay unveiled. */}
       <div
         aria-hidden
-        className="absolute inset-0 z-10 bg-summit/65 xl:bg-summit/25"
+        className="absolute inset-0 z-10"
+        style={{ backgroundImage: moodGradientCss() }}
       />
-      <div
-        aria-hidden
-        className="absolute inset-0 z-10 bg-[linear-gradient(to_top_right,rgb(11_31_42/0.78)_0%,rgb(11_31_42/0.15)_100%)]"
-      />
-      <div
-        aria-hidden
-        className="absolute inset-0 z-10 bg-[linear-gradient(to_right,rgb(11_31_42/0.72)_0%,rgb(11_31_42/0.50)_40%,rgb(11_31_42/0)_72%)]"
-      />
-      <div
-        aria-hidden
-        className="absolute inset-0 z-10 bg-[linear-gradient(to_top,rgb(11_31_42/0.70)_0%,rgb(11_31_42/0.35)_35%,rgb(11_31_42/0)_65%)]"
-      />
-      {/* Ridgeline: above the photo, below the text. */}
+
+      {/* Ridgeline: above the photo, below the text. Decorative only — it sits
+          entirely below the copy block at every breakpoint, which
+          `pnpm check:hero` asserts. */}
       <Parallax
         distance={24}
         className="pointer-events-none absolute inset-x-0 bottom-0 z-10"
       >
-        <Ridge className="h-[30vh] w-full opacity-40" />
+        <Ridge className="h-[30vh] w-full opacity-[0.35]" />
       </Parallax>
 
-      {/* Dissolve into the page. Drawn last of the z-10 layers so it takes the
-          ridgeline down with it. In light mode this band goes pale, which is why
-          the controls below sit clear of it. */}
+      {/* Dissolve into the page. --color-background is glacier in light and
+          summit in dark, so this never fades toward white. Eased through a
+          midpoint so it reads as a dissolve rather than a band. */}
       <div
         aria-hidden
-        className="absolute inset-x-0 bottom-0 z-10 h-24 bg-gradient-to-b from-transparent to-background"
+        className="absolute inset-x-0 bottom-0 z-10 h-24"
+        style={{
+          backgroundImage:
+            "linear-gradient(to bottom, transparent 0%, color-mix(in srgb, var(--color-background) 40%, transparent) 62%, var(--color-background) 100%)",
+        }}
       />
 
       {/* Copy — sits slightly above true centre (55/45). */}

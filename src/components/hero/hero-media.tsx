@@ -10,6 +10,7 @@ import {
 } from "motion/react";
 
 import type { HeroSlide } from "@/content/hero-slides";
+import { BASE_IMAGE_FILTER } from "@/lib/hero-scrim";
 import { EASE } from "@/lib/motion";
 import { CROSSFADE } from "@/components/hero/use-hero-carousel";
 
@@ -85,7 +86,15 @@ export function HeroMedia({
             fetchPriority={lcp ? "high" : "auto"}
             placeholder={slide.image.blurDataURL ? "blur" : "empty"}
             blurDataURL={slide.image.blurDataURL}
-            style={{ objectFit: "cover", objectPosition: slide.focalPoint }}
+            style={{
+              objectFit: "cover",
+              objectPosition: slide.focalPoint,
+              // The scrim is local now, so lifting every frame costs nothing in
+              // legibility. Per-slide `imageFilter` is appended, not replaced.
+              filter: slide.imageFilter
+                ? `${BASE_IMAGE_FILTER} ${slide.imageFilter}`
+                : BASE_IMAGE_FILTER,
+            }}
           />
         </motion.div>
       ) : null}

@@ -14,6 +14,20 @@
  * Shoot or crop landscape at 16:9 or wider, 2400px on the long edge or more.
  * The carousel covers the frame, so use `focalPoint` to say which part must
  * survive the crop on tall phone screens.
+ *
+ * CORRECTING AN IMAGE THAT DOES NOT SIT WELL
+ * The overlay is deliberately light and identical for every slide, so a bright
+ * or busy photograph can leave the copy short of contrast. Do not change the
+ * component. Run `pnpm check:hero`; it measures each image and prints the
+ * minimum `scrimStrength` that would make it pass. Set that value on the slide.
+ *
+ *   scrimStrength — 0–1, multiplies the text bed's opacity. Default 1.
+ *   imageFilter   — extra CSS filter, appended after the base treatment.
+ *   textPosition  — "left" (default) or "center".
+ *
+ * All five are intentionally left undefined: the placeholders pass as they are,
+ * and every value set here is a per-image correction that a future photograph
+ * should not silently inherit. Full guidance in hero-slides.README.md.
  */
 
 export type HeroSlide = {
@@ -37,6 +51,18 @@ export type HeroSlide = {
   };
   /** CSS object-position. Defaults to "center". */
   focalPoint?: string;
+  /**
+   * 0–1, multiplies the text bed's opacity for this slide only. Default 1.
+   * `pnpm check:hero` prints the minimum value each image needs.
+   */
+  scrimStrength?: number;
+  /**
+   * Extra CSS filter for this image, appended after the base treatment —
+   * e.g. "brightness(1.1)" to lift a flat frame, "saturate(0.9)" to calm one.
+   */
+  imageFilter?: string;
+  /** Alignment of the copy block. Default "left". */
+  textPosition?: "left" | "center";
   ctaPrimary: { label: string; href: string };
   ctaSecondary?: { label: string; href: string };
 };
@@ -103,8 +129,8 @@ export const heroSlides: HeroSlide[] = [
     headline: "Beyond the rain shadow.",
     subline: "Restricted-area permits arranged and itemised before you pay.",
     image: {
-      src: unsplash("photo-1776796201029-6201a8756d8c"),
-      alt: "Wind-cut, banded rock formations under a hard blue sky in Upper Mustang.",
+      src: unsplash("photo-1758701320941-89f86492c1ef"),
+      alt: "A walled village and terraced fields on the arid valley floor of Upper Mustang.",
       credit: "Unsplash",
     },
     focalPoint: "center 55%",
