@@ -120,15 +120,16 @@ export function HeroCarousel() {
         <Ridge className="h-[30vh] w-full opacity-[0.35]" />
       </Parallax>
 
-      {/* Dissolve into the page. --color-background is glacier in light and
-          summit in dark, so this never fades toward white. Eased through a
-          midpoint so it reads as a dissolve rather than a band. */}
+      {/* Hand off to the band below. It resolves to --color-band, the exact
+          surface the trust strip paints, so the two meet without a seam. Short
+          and fully opaque at the bottom: with a real section underneath, a long
+          translucent fade read as a smear rather than a transition. */}
       <div
         aria-hidden
-        className="absolute inset-x-0 bottom-0 z-10 h-16"
+        className="absolute inset-x-0 bottom-0 z-10 h-12"
         style={{
           backgroundImage:
-            "linear-gradient(to bottom, transparent 0%, color-mix(in srgb, var(--color-background) 18%, transparent) 65%, color-mix(in srgb, var(--color-background) 55%, transparent) 100%)",
+            "linear-gradient(to bottom, transparent 0%, color-mix(in srgb, var(--color-band) 30%, transparent) 55%, var(--color-band) 100%)",
         }}
       />
 

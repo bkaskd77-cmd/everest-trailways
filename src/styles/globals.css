@@ -114,6 +114,10 @@
   --verified: var(--color-pine);
   --info: var(--color-sky-deep);
   --destructive: #b3261e;
+
+  /* The paperwork surface directly beneath the hero. The hero's bottom fade
+     resolves to this exact value, so the seam cannot disagree with the band. */
+  --band: var(--color-glacier);
 }
 
 .dark {
@@ -146,6 +150,8 @@
   --verified: var(--color-pine-light);
   --info: var(--color-sky);
   --destructive: #e5675e;
+
+  --band: var(--color-summit-raised);
 }
 
 @theme inline {
@@ -166,6 +172,7 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-band: var(--band);
   --color-verified: var(--verified);
   --color-info: var(--info);
   --color-destructive: var(--destructive);

@@ -14,7 +14,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check:hero": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-hero-contrast.ts",
-    "tune:hero": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-hero-contrast.ts --tune"
+    "tune:hero": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-hero-contrast.ts --tune",
+    "check:trust": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-trust.ts"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
