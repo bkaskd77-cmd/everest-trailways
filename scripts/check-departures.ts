@@ -13,9 +13,13 @@
  * than silently shipped.
  */
 
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+
 import {
   departures,
   departureStatus,
+  guaranteeMeta,
   seatsRemaining,
   type Departure,
   type DepartureStatus,
@@ -132,6 +136,61 @@ for (const d of departures) {
       "guaranteedAt is set but the threshold is not met",
     );
   }
+}
+
+/* ------------------------------------------------------- section-level rules */
+
+if (departures.length < 6) {
+  fail(
+    "section",
+    "too-few",
+    `${departures.length} departures — the grid expects at least 6`,
+  );
+}
+
+// October and November are Nepal's busiest months. A visible set without them
+// is not representative of what is actually on sale.
+const peakMonths = departures.filter((d) => {
+  const month = new Date(d.departsOn).getUTCMonth();
+  return month === 9 || month === 10;
+});
+if (peakMonths.length < 2) {
+  fail(
+    "section",
+    "missing-peak",
+    `only ${peakMonths.length} departure(s) fall in Oct or Nov — the busiest months must be represented`,
+  );
+}
+
+// A guaranteed departure showing "decided by" wastes a line on a decision that
+// has already been made.
+for (const d of departures) {
+  const status = departureStatus(d, now);
+  const meta = guaranteeMeta(d, now);
+  if (status !== "needs-n" && /decided by/i.test(meta)) {
+    fail(
+      d.id,
+      "stale-decision-date",
+      `status is "${status}" but the meta line still reads "decided by"`,
+    );
+  }
+  if (status === "needs-n" && !/decided by/i.test(meta)) {
+    fail(
+      d.id,
+      "missing-decision-date",
+      "needs-n must publish the decision date",
+    );
+  }
+}
+
+// The ask affordance is a component concern, so this is a source-level check:
+// every card must offer the third action.
+const cardSource = await readFile(
+  path.join(process.cwd(), "src/components/departures/departure-card.tsx"),
+  "utf8",
+);
+if (!/<AskPanel\b/.test(cardSource)) {
+  fail("section", "missing-ask", "DepartureCard does not render <AskPanel>");
 }
 
 /* -------------------------------------------------------------- feed shape */

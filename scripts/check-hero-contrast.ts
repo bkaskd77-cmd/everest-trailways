@@ -505,6 +505,7 @@ async function main() {
     }
   }
 
+  checkHeadlineLines();
   print(rows, needed, ridgeNotes);
 
   if (TUNE) {
@@ -565,6 +566,49 @@ async function writeStrengths(needed: Map<string, number>) {
   console.log("  tune: wrote src/content/hero-slides.ts");
   for (const c of changes) console.log(`    ${c}`);
   console.log("\n  Re-run `pnpm check:hero` to confirm.\n");
+}
+
+/**
+ * Headline length.
+ *
+ * A three-line headline at 1440px pushes the eyebrow up under the nav and
+ * breaks the hero's vertical balance. Two lines is the design; the split
+ * function only chooses where to break, it cannot stop a half being too long
+ * for the column. So the copy has to be short enough, and that is checked here
+ * rather than left to whoever writes the next slide.
+ */
+function checkHeadlineLines() {
+  const limits = [
+    { label: "1440", vw: 1440, vh: 900, max: 2 },
+    { label: "390", vw: 390, vh: 844, max: 3 },
+  ];
+  const failures: string[] = [];
+
+  for (const slide of heroSlides) {
+    for (const { label, vw, vh, max } of limits) {
+      const { bands } = layout(slide, vw, vh);
+      const headline = bands.find((b) => b.name === "headline");
+      if (!headline) continue;
+      const t = typeScale(vw);
+      const size = vw >= 1280 ? t.text6xl : vw >= 640 ? t.text5xl : t.text4xl;
+      const lead = vw >= 1280 ? 1.02 : vw >= 640 ? 1.06 : 1.12;
+      const lines = Math.round((headline.y1 - headline.y0) / (size * lead));
+      if (lines > max) {
+        failures.push(
+          `    ${slide.id} @ ${label}px: headline renders ${lines} lines, max ${max} — "${slide.headline}"`,
+        );
+      }
+    }
+  }
+
+  console.log("\n  Headline length");
+  if (failures.length) {
+    console.log("  FAIL");
+    for (const f of failures) console.log(f);
+    process.exitCode = 1;
+  } else {
+    console.log("  ok — every headline fits 2 lines at 1440px and 3 at 390px");
+  }
 }
 
 function print(rows: Row[], needed: Map<string, number>, ridgeNotes: string[]) {

@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, BadgeCheck, Users } from "lucide-react";
 
+import { AskPanel } from "@/components/departures/ask-panel";
 import { SeatMeter } from "@/components/departures/seat-meter";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,6 +10,7 @@ import {
   formatDate,
   formatDateRange,
   formatGroup,
+  guaranteeMeta,
   seatsRemaining,
   seatsToGuarantee,
   type Departure,
@@ -119,10 +121,10 @@ export function DepartureCard({ departure }: { departure: Departure }) {
         <div className="mt-4 rounded-md bg-muted/60 p-3">
           <GuaranteeLine departure={departure} />
           <SeatMeter departure={departure} status={status} />
+          {/* "decided by" only survives in the needs-n state — see
+              guaranteeMeta, which the departures guard asserts against. */}
           <p className="mt-2 tabular text-xs text-muted-foreground">
-            {departure.seatsBooked} booked · guaranteed at{" "}
-            {departure.minimumToRun} · decided by{" "}
-            {formatDate(departure.decisionDate)}
+            {guaranteeMeta(departure)}
           </p>
         </div>
 
@@ -184,6 +186,10 @@ export function DepartureCard({ departure }: { departure: Departure }) {
               </>
             )}
           </div>
+
+          {/* Third action, deliberately quieter and on its own line so it never
+              competes with "View departure". */}
+          <AskPanel departure={departure} />
         </div>
       </div>
     </article>

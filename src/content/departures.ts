@@ -125,7 +125,7 @@ export const departures: Departure[] = [
     departsOn: "2026-11-02",
     returnsOn: "2026-11-10",
     seatsTotal: 10,
-    seatsBooked: 9,
+    seatsBooked: 10,
     minimumToRun: 4,
     guaranteedAt: "2026-05-19",
     decisionDate: "2026-10-02",
@@ -246,7 +246,7 @@ export const departures: Departure[] = [
     departsOn: "2027-04-12",
     returnsOn: "2027-04-24",
     seatsTotal: 8,
-    seatsBooked: 4,
+    seatsBooked: 6,
     minimumToRun: 4,
     guaranteedAt: "2026-08-01",
     decisionDate: "2027-03-12",
@@ -358,6 +358,31 @@ export function formatDateRange(departsOn: string, returnsOn: string): string {
 export function formatDate(iso: string): string {
   const d = new Date(iso);
   return `${d.getUTCDate()} ${d.toLocaleString("en-GB", { month: "short", timeZone: "UTC" })} ${d.getUTCFullYear()}`;
+}
+
+/**
+ * The line under the seat meter.
+ *
+ * Once a departure is guaranteed, "decided by <date>" is dead weight — the
+ * decision has been made. What matters then is that further bookings cannot
+ * change it. The decision date only earns its line in the `needs-n` state,
+ * where it is the whole point.
+ *
+ * A pure function so `pnpm check:departures` can assert the rule rather than
+ * trusting the component.
+ */
+export function guaranteeMeta(d: Departure, now: Date = new Date()): string {
+  const status = departureStatus(d, now);
+  if (status === "needs-n") {
+    return `${d.seatsBooked} booked · guaranteed at ${d.minimumToRun} · decided by ${formatDate(d.decisionDate)}`;
+  }
+  if (status === "full") {
+    return `${d.seatsTotal} of ${d.seatsTotal} booked · this departure is closed to new bookings`;
+  }
+  if (status === "closed") {
+    return `Did not reach ${d.minimumToRun} bookings · everyone booked was refunded in full`;
+  }
+  return `${d.seatsBooked} booked · guaranteed — runs regardless of further bookings`;
 }
 
 /** "2 Germany · 1 Australia" — country and count, nothing else. */

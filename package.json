@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "pnpm check:departures && next build",
+    "build": "pnpm check:departures && pnpm check:trust && next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",

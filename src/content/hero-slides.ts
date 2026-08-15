@@ -96,7 +96,7 @@ export const heroSlides: HeroSlide[] = [
   {
     id: "annapurna",
     region: "Annapurna Conservation Area",
-    headline: "Twelve days. One circuit. No surprises.",
+    headline: "One circuit. No surprises.",
     subline:
       "Fixed departures with live seat counts and a published cost sheet.",
     image: {
@@ -111,7 +111,7 @@ export const heroSlides: HeroSlide[] = [
   {
     id: "langtang",
     region: "Langtang Valley",
-    headline: "Close to Kathmandu. Far from the crowds.",
+    headline: "Near Kathmandu. Far from crowds.",
     subline: "Short-window treks for travellers with a week, not a month.",
     image: {
       src: unsplash("photo-1741755072624-7dffb6bed861"),
@@ -141,7 +141,7 @@ export const heroSlides: HeroSlide[] = [
   {
     id: "chitwan",
     region: "Chitwan · Terai",
-    headline: "Not every adventure is uphill.",
+    headline: "Not every trek is uphill.",
     subline:
       "Jungle, river and cultural journeys run by the same licensed team.",
     image: {
