@@ -1,0 +1,262 @@
+@import "tailwindcss";
+/* Enter/exit keyframes used by the shadcn overlay primitives. */
+@import "tw-animate-css";
+
+/* CSS lives in src/styles, so point source detection back at the app code. */
+@source "../";
+
+/* next-themes writes `class="dark"` on <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------------------------------------------------------------------------
+   1. Brand primitives
+   Raw, mode-independent values. Never reference these directly in components
+   unless the value is genuinely mode-independent (e.g. a dark hero panel).
+   Reach for the semantic aliases in section 2 instead.
+--------------------------------------------------------------------------- */
+@theme {
+  /* Core palette */
+  --color-summit: #0b1f2a;
+  --color-glacier: #f5f3ee;
+  --color-stone: #8a8578;
+  --color-prayer: #c8511b;
+  --color-pine: #2f5d4f;
+  --color-sky: #7fa9c4;
+  --color-snow: #ffffff;
+
+  /* Derived steps. Each exists so the same hue can hold AA contrast on the
+     opposite surface: `-deep` reads on glacier, `-light` reads on summit. */
+  --color-summit-raised: #12303f;
+  --color-glacier-sunk: #ebe8e0;
+  --color-stone-deep: #5c584d;
+  --color-stone-light: #a8a296;
+  --color-prayer-deep: #a33f12;
+  --color-prayer-light: #e87a45;
+  --color-pine-light: #6fa893;
+  --color-sky-deep: #3c6c88;
+
+  /* Typography */
+  --font-display: var(--font-instrument-serif), ui-serif, Georgia, serif;
+  --font-sans:
+    var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  /* Fluid type scale — 360px floor, 1440px ceiling. */
+  --text-xs: clamp(0.75rem, 0.735rem + 0.07vw, 0.8125rem);
+  --text-xs--line-height: 1.5;
+  --text-sm: clamp(0.875rem, 0.86rem + 0.07vw, 0.9375rem);
+  --text-sm--line-height: 1.5;
+  --text-base: clamp(1rem, 0.977rem + 0.1vw, 1.0625rem);
+  --text-base--line-height: 1.65;
+  --text-lg: clamp(1.125rem, 1.08rem + 0.2vw, 1.25rem);
+  --text-lg--line-height: 1.6;
+  --text-xl: clamp(1.25rem, 1.16rem + 0.4vw, 1.5rem);
+  --text-xl--line-height: 1.45;
+  --text-2xl: clamp(1.5rem, 1.36rem + 0.62vw, 1.875rem);
+  --text-2xl--line-height: 1.3;
+  --text-3xl: clamp(1.875rem, 1.64rem + 1.04vw, 2.5rem);
+  --text-3xl--line-height: 1.2;
+  --text-4xl: clamp(2.25rem, 1.88rem + 1.67vw, 3.25rem);
+  --text-4xl--line-height: 1.12;
+  --text-5xl: clamp(2.75rem, 2.1rem + 2.9vw, 4.5rem);
+  --text-5xl--line-height: 1.06;
+  --text-6xl: clamp(3.25rem, 2.23rem + 4.54vw, 6rem);
+  --text-6xl--line-height: 1.02;
+  --text-7xl: clamp(3.75rem, 2.36rem + 6.19vw, 7.5rem);
+  --text-7xl--line-height: 0.98;
+
+  /* Radii — restraint is the rule; cards use lg. */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+
+  /* Exactly two shadows, both tinted with summit rather than pure black. */
+  --shadow-soft:
+    0 1px 2px rgb(11 31 42 / 0.05), 0 2px 10px rgb(11 31 42 / 0.06);
+  --shadow-lift:
+    0 2px 4px rgb(11 31 42 / 0.06), 0 14px 32px rgb(11 31 42 / 0.16);
+
+  /* House easing, mirrored from src/lib/motion.ts EASE. */
+  --ease-house: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ---------------------------------------------------------------------------
+   2. Semantic aliases
+--------------------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+
+  --background: var(--color-glacier);
+  --foreground: var(--color-summit);
+
+  --muted: var(--color-glacier-sunk);
+  --muted-foreground: var(--color-stone-deep);
+
+  --card: var(--color-snow);
+  --card-foreground: var(--color-summit);
+  --popover: var(--color-snow);
+  --popover-foreground: var(--color-summit);
+
+  --primary: var(--color-prayer);
+  --primary-foreground: var(--color-snow);
+
+  --secondary: var(--color-glacier-sunk);
+  --secondary-foreground: var(--color-summit);
+
+  /* `accent` follows the shadcn convention: the subtle hover/active surface. */
+  --accent: #ede9e0;
+  --accent-foreground: var(--color-summit);
+
+  --border: color-mix(in oklab, var(--color-stone) 32%, var(--color-glacier));
+  --input: color-mix(in oklab, var(--color-stone) 40%, var(--color-glacier));
+  --ring: var(--color-prayer);
+
+  --verified: var(--color-pine);
+  --info: var(--color-sky-deep);
+  --destructive: #b3261e;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: var(--color-summit);
+  --foreground: var(--color-glacier);
+
+  --muted: var(--color-summit-raised);
+  --muted-foreground: var(--color-stone-light);
+
+  --card: var(--color-summit-raised);
+  --card-foreground: var(--color-glacier);
+  --popover: var(--color-summit-raised);
+  --popover-foreground: var(--color-glacier);
+
+  --primary: var(--color-prayer);
+  --primary-foreground: var(--color-snow);
+
+  --secondary: var(--color-summit-raised);
+  --secondary-foreground: var(--color-glacier);
+
+  --accent: #1a3b4c;
+  --accent-foreground: var(--color-glacier);
+
+  --border: color-mix(in oklab, var(--color-stone) 26%, var(--color-summit));
+  --input: color-mix(in oklab, var(--color-stone) 34%, var(--color-summit));
+  --ring: var(--color-prayer);
+
+  --verified: var(--color-pine-light);
+  --info: var(--color-sky);
+  --destructive: #e5675e;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-verified: var(--verified);
+  --color-info: var(--info);
+  --color-destructive: var(--destructive);
+}
+
+/* ---------------------------------------------------------------------------
+   3. Base layer
+--------------------------------------------------------------------------- */
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+    /* Keep anchor targets clear of the fixed header. */
+    scroll-padding-top: 6rem;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--text-base--line-height);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Visible, on-brand focus. shadcn primitives carry their own `ring-ring`
+     treatment (also prayer), so they opt out of the global outline. */
+  :focus-visible:not(:where([data-slot])) {
+    outline: 2px solid var(--color-prayer);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: var(--color-prayer);
+    color: var(--color-snow);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Reduced motion
+   Every primitive in src/components/motion tags its animated element with
+   `data-motion`. Motion writes its keyframes as inline styles, and an
+   !important stylesheet rule outranks those — so this pins those elements to
+   their resting state from the very first paint. Doing it in CSS rather than
+   by branching in React keeps the server and client markup identical, which is
+   what keeps hydration clean.
+--------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  [data-motion] {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+    clip-path: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   4. Utilities
+--------------------------------------------------------------------------- */
+
+/* Prices and altitudes must align in a column. */
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* The page gutter. One place to change the shell's horizontal rhythm. */
+@utility shell {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 88rem;
+  padding-inline: 1.5rem;
+
+  @media (width >= 64rem) {
+    padding-inline: 3rem;
+  }
+}
