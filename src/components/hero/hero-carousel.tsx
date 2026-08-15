@@ -18,8 +18,16 @@ export function HeroCarousel() {
   const slides = heroSlides;
   const total = slides.length;
   const rootRef = React.useRef<HTMLElement>(null);
-  const { index, loaded, progress, goTo, next, previous, setPause } =
-    useHeroCarousel({ count: total, rootRef });
+  const {
+    index,
+    loaded,
+    hasChanged,
+    progress,
+    goTo,
+    next,
+    previous,
+    setPause,
+  } = useHeroCarousel({ count: total, rootRef });
 
   const touchStart = React.useRef<{ x: number; y: number } | null>(null);
 
@@ -144,6 +152,7 @@ export function HeroCarousel() {
             slide={slides[index]}
             index={index}
             total={total}
+            animate={hasChanged}
           />
         </div>
       </div>

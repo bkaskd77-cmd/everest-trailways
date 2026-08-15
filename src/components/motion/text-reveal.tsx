@@ -14,6 +14,13 @@ type TextRevealProps = {
   delay?: number;
   /** "mount" for above-the-fold headings, "inView" for anything below it. */
   trigger?: "mount" | "inView";
+  /**
+   * Set false to render the final state with no animation at all. Use it for
+   * first paint: a masked line is clipped to zero visible area until it slides
+   * in, which makes it ineligible as the LCP element and pushes LCP out by the
+   * length of the animation.
+   */
+  animate?: boolean;
 };
 
 /**
@@ -30,7 +37,20 @@ export function TextReveal({
   stagger = 0.09,
   delay = 0,
   trigger = "mount",
+  animate = true,
 }: TextRevealProps) {
+  if (!animate) {
+    return (
+      <Component className={className}>
+        {lines.map((line) => (
+          <span key={line} className="block pb-[0.08em]">
+            {line}
+          </span>
+        ))}
+      </Component>
+    );
+  }
+
   const play =
     trigger === "mount"
       ? ({ animate: "visible" } as const)

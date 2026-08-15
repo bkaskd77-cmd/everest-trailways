@@ -37,11 +37,21 @@ export function HeroCopy({
   slide,
   index,
   total,
+  animate,
 }: {
   slide: HeroSlide;
   index: number;
   total: number;
+  /**
+   * False on the opening slide. Its copy is painted straight from the server
+   * HTML, because an element animating up from opacity 0 is not eligible as the
+   * LCP element until it lands — which measured as 2.3s of pure render delay.
+   * The entrance is for slide *changes*, which is where it does its work.
+   */
+  animate: boolean;
 }) {
+  const state = animate ? "hidden" : "visible";
+
   return (
     <div
       role="group"
@@ -52,9 +62,9 @@ export function HeroCopy({
       <motion.p
         data-motion
         variants={item}
-        initial="hidden"
+        initial={state}
         animate="visible"
-        transition={{ delay: COPY_OFFSET }}
+        transition={{ delay: animate ? COPY_OFFSET : 0 }}
         // Not --color-sky: measured against the brightest pixel of these
         // photographs it tops out around 4.3:1, and no reasonable scrim fixes
         // that without flattening the image. Glacier clears AA everywhere.
@@ -67,6 +77,7 @@ export function HeroCopy({
         as="h1"
         lines={splitHeadline(slide.headline)}
         delay={COPY_OFFSET}
+        animate={animate}
         // Steps down on small screens: at text-5xl the longer headlines ran to
         // four lines at 360px.
         className="mt-5 font-display text-4xl tracking-tight text-glacier sm:text-5xl xl:text-6xl"
@@ -75,7 +86,7 @@ export function HeroCopy({
       <motion.div
         data-motion
         variants={group}
-        initial="hidden"
+        initial={state}
         animate="visible"
         className="mt-6"
       >

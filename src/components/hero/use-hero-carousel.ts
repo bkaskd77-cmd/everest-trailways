@@ -32,6 +32,10 @@ export function useHeroCarousel({ count, rootRef }: Options) {
   const [loaded, setLoaded] = React.useState<number[]>(() =>
     count > 1 ? [0, 1] : [0],
   );
+  // False until the carousel first moves. The opening slide paints straight
+  // from the server HTML — an entrance animation there costs LCP the length of
+  // the animation, since a faded-out element is not LCP-eligible.
+  const [hasChanged, setHasChanged] = React.useState(false);
 
   const progress = useMotionValue(0);
   // Mirrors `index` so the animation frame can advance without a stale closure.
@@ -59,6 +63,7 @@ export function useHeroCarousel({ count, rootRef }: Options) {
       indexRef.current = target;
       progress.set(0);
       setIndex(target);
+      setHasChanged(true);
       setLoaded((current) =>
         current.includes(target) && current.includes(upcoming)
           ? current
@@ -119,5 +124,14 @@ export function useHeroCarousel({ count, rootRef }: Options) {
     return () => observer.disconnect();
   }, [rootRef, setPause]);
 
-  return { index, loaded, progress, goTo: commit, next, previous, setPause };
+  return {
+    index,
+    loaded,
+    hasChanged,
+    progress,
+    goTo: commit,
+    next,
+    previous,
+    setPause,
+  };
 }
