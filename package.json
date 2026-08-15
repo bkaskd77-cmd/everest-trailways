@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "pnpm check:departures && next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
@@ -15,7 +15,8 @@
     "format:check": "prettier --check .",
     "check:hero": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-hero-contrast.ts",
     "tune:hero": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-hero-contrast.ts --tune",
-    "check:trust": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-trust.ts"
+    "check:trust": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-trust.ts",
+    "check:departures": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-departures.ts"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",

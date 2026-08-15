@@ -128,8 +128,12 @@ export function HeroCarousel() {
         aria-hidden
         className="absolute inset-x-0 bottom-0 z-10 h-12"
         style={{
+          // A straight alpha ramp in the band's own colour. Two stops, no
+          // midpoint, and never the `transparent` keyword — that is transparent
+          // black, and ramping toward it overshoots on the way to a near-white
+          // band, which is what made the seam read as a light smear.
           backgroundImage:
-            "linear-gradient(to bottom, transparent 0%, color-mix(in srgb, var(--color-band) 30%, transparent) 55%, var(--color-band) 100%)",
+            "linear-gradient(to bottom, rgb(var(--band-rgb) / 0) 0%, rgb(var(--band-rgb) / 1) 100%)",
         }}
       />
 

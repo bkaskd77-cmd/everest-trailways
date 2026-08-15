@@ -116,8 +116,12 @@
   --destructive: #b3261e;
 
   /* The paperwork surface directly beneath the hero. The hero's bottom fade
-     resolves to this exact value, so the seam cannot disagree with the band. */
+     resolves to this exact value, so the seam cannot disagree with the band.
+     The raw channels exist so the fade can ramp alpha in the band's own colour
+     — mixing toward the `transparent` keyword is a mix toward transparent
+     *black*, which overshoots on the way to a near-white band. */
   --band: var(--color-glacier);
+  --band-rgb: 245 243 238;
 }
 
 .dark {
@@ -152,6 +156,7 @@
   --destructive: #e5675e;
 
   --band: var(--color-summit-raised);
+  --band-rgb: 18 48 63;
 }
 
 @theme inline {

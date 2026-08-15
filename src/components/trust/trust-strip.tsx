@@ -97,10 +97,16 @@ export function TrustStrip() {
         What you can check for yourself
       </h2>
 
-      <div className="shell py-20 lg:py-28">
+      {/* Asymmetric on purpose: the closing line carries its own top margin, so
+          equal padding top and bottom read as roughly twice the space below. */}
+      <div className="shell pt-20 pb-12 lg:pt-28 lg:pb-16">
         <StaggerGroup
           as="ul"
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
+          // The row track lives on the list, and each column opts into it with
+          // subgrid. Giving every column its own grid cannot align anything
+          // across siblings — row heights are per-item — which is why the
+          // verify links previously sat at four different heights.
+          className="grid grid-cols-1 sm:grid-cols-2 sm:grid-rows-[repeat(2,auto_auto_1fr_auto_auto)] lg:grid-cols-4 lg:grid-rows-[auto_auto_1fr_auto_auto]"
         >
           {trustPoints.map((point, index) => {
             const rules = RULE_VISIBILITY(index);
@@ -108,8 +114,12 @@ export function TrustStrip() {
               <Reveal
                 as="li"
                 key={point.id}
+                // A five-row grid with only the body flexible, so the verify
+                // link and the status badge land on shared baselines across all
+                // four columns however long the sentence is.
                 className={cn(
-                  "relative py-10 sm:py-12 lg:py-0",
+                  "relative grid grid-rows-[auto_auto_1fr_auto_auto] py-10",
+                  "sm:row-span-5 sm:grid-rows-subgrid sm:py-12 lg:py-0",
                   COLUMN_PADDING[index % COLUMN_PADDING.length],
                 )}
               >
@@ -138,9 +148,11 @@ export function TrustStrip() {
                 <p className="mt-3 text-xs tracking-[0.18em] text-muted-foreground uppercase">
                   {point.figureLabel}
                 </p>
-                <p className="mt-5 max-w-[34ch] text-base">{point.body}</p>
+                <p className="mt-5 max-w-[34ch] pb-2 text-base">{point.body}</p>
 
-                <VerifyLink verify={point.verify} />
+                <div className="flex items-start">
+                  <VerifyLink verify={point.verify} />
+                </div>
                 <StatusBadge status={point.status} />
               </Reveal>
             );
