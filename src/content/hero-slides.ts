@@ -1,0 +1,128 @@
+/**
+ * The hero carousel's content. This is the single place to edit slide copy and
+ * imagery — no component needs touching.
+ *
+ * SWAPPING IN REAL PHOTOGRAPHY
+ * Drop the file into `public/hero/` and change only that slide's `image.src`:
+ *
+ *     src: "/hero/khumbu.jpg"
+ *
+ * Nothing else changes: `next/image` handles local and remote sources
+ * identically. Once every `src` is local, the `images.remotePatterns` block in
+ * next.config.ts can be deleted.
+ *
+ * Shoot or crop landscape at 16:9 or wider, 2400px on the long edge or more.
+ * The carousel covers the frame, so use `focalPoint` to say which part must
+ * survive the crop on tall phone screens.
+ */
+
+export type HeroSlide = {
+  id: string;
+  /** Eyebrow above the headline, e.g. "Khumbu · Solukhumbu". */
+  region: string;
+  /** Two lines max. Set in Instrument Serif, one array entry per line. */
+  headline: string;
+  /** One trust-carrying sentence. */
+  subline: string;
+  image: {
+    src: string;
+    alt: string;
+    credit?: string;
+    /**
+     * Tiny base64 preview shown while the full image loads. Optional — without
+     * one the slide rests on a summit-coloured panel, never white. Only slide 1
+     * needs it, since it is the LCP element.
+     */
+    blurDataURL?: string;
+  };
+  /** CSS object-position. Defaults to "center". */
+  focalPoint?: string;
+  ctaPrimary: { label: string; href: string };
+  ctaSecondary?: { label: string; href: string };
+};
+
+/**
+ * Unsplash's CDN does the resizing before Next's optimiser ever sees the file,
+ * which keeps the origin fetch small. Local files will not need this.
+ */
+const unsplash = (id: string) =>
+  `https://images.unsplash.com/${id}?auto=format&fit=crop&w=2400&h=1350&q=75`;
+
+export const heroSlides: HeroSlide[] = [
+  {
+    id: "khumbu",
+    region: "Khumbu · Everest Region",
+    headline: "The Himalaya, made verifiable.",
+    subline:
+      "Every itinerary carries its licence, its guide ratios and its full price breakdown.",
+    image: {
+      src: unsplash("photo-1693717671076-374d59bc2ff2"),
+      alt: "A carved mani stone on the trail below a snow-covered Himalayan peak in the Khumbu.",
+      credit: "Unsplash",
+      blurDataURL:
+        "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABALDA4MChAODQ4SERATGCgaGBYWGDEjJR0oOjM9PDkzODdASFxOQERXRTc4UG1RV19iZ2hnPk1xeXBkeFxlZ2P/2wBDARESEhgVGC8aGi9jQjhCY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2P/wAARCAALABQDASIAAhEBAxEB/8QAGAAAAwEBAAAAAAAAAAAAAAAAAAIFBAb/xAAkEAACAQMEAAcAAAAAAAAAAAABAgMABBEFEiFhEyIxQWJxgf/EABUBAQEAAAAAAAAAAAAAAAAAAAAC/8QAGREAAwEBAQAAAAAAAAAAAAAAAAECMRIT/9oADAMBAAIRAxEAPwBC9vHaFbkxMjDcNpCsCOOPb16rLFPHJ5YYyvyYjFRdUkdmjUscEAkdnFLpkjpchFYhSyjH2wFFVJaHMt4ddbXVvDAouDBI7chvEI4/BRU6CVhbxMcMzoGYsoJJx3RT0oniT//Z",
+    },
+    focalPoint: "center 45%",
+    ctaPrimary: { label: "Plan My Trek", href: "/plan" },
+    ctaSecondary: { label: "Browse Everest treks", href: "/regions/khumbu" },
+  },
+  {
+    id: "annapurna",
+    region: "Annapurna Conservation Area",
+    headline: "Twelve days. One circuit. No surprises.",
+    subline:
+      "Fixed departures with live seat counts and a published cost sheet.",
+    image: {
+      src: unsplash("photo-1531719555052-632b0348c404"),
+      alt: "Snow-covered ridgelines of the Annapurna massif at first light.",
+      credit: "Unsplash",
+    },
+    focalPoint: "center 40%",
+    ctaPrimary: { label: "See fixed departures", href: "/treks" },
+    ctaSecondary: { label: "Read the cost sheet", href: "/pricing" },
+  },
+  {
+    id: "langtang",
+    region: "Langtang Valley",
+    headline: "Close to Kathmandu. Far from the crowds.",
+    subline: "Short-window treks for travellers with a week, not a month.",
+    image: {
+      src: unsplash("photo-1741755072624-7dffb6bed861"),
+      alt: "Trekkers crossing a broad glacial valley beneath the Langtang range.",
+      credit: "Unsplash",
+    },
+    ctaPrimary: { label: "Find a short trek", href: "/treks" },
+    ctaSecondary: {
+      label: "Langtang in seven days",
+      href: "/regions/langtang",
+    },
+  },
+  {
+    id: "mustang",
+    region: "Upper Mustang",
+    headline: "Beyond the rain shadow.",
+    subline: "Restricted-area permits arranged and itemised before you pay.",
+    image: {
+      src: unsplash("photo-1776796201029-6201a8756d8c"),
+      alt: "Wind-cut, banded rock formations under a hard blue sky in Upper Mustang.",
+      credit: "Unsplash",
+    },
+    focalPoint: "center 55%",
+    ctaPrimary: { label: "Check permit costs", href: "/pricing" },
+    ctaSecondary: { label: "Mustang itineraries", href: "/regions/mustang" },
+  },
+  {
+    id: "chitwan",
+    region: "Chitwan · Terai",
+    headline: "Not every adventure is uphill.",
+    subline:
+      "Jungle, river and cultural journeys run by the same licensed team.",
+    image: {
+      src: unsplash("photo-1700366776973-20bda63d5b1a"),
+      alt: "A wide slow river running through dense sal forest in the Terai lowlands.",
+      credit: "Unsplash",
+    },
+    focalPoint: "center 60%",
+    ctaPrimary: { label: "Explore activities", href: "/activities" },
+  },
+];

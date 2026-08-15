@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { Ridge } from "@/components/design-system/ridge";
+import { Ridge } from "@/components/hero/ridge";
 import {
   MagneticButton,
   Parallax,

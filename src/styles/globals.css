@@ -237,6 +237,24 @@
     filter: none !important;
     clip-path: none !important;
   }
+
+  /* The hero carousel collapses to slide 1. Its autoplay clock never starts
+     (see use-hero-carousel.ts), so the index is pinned at 0 — these rules just
+     make sure the other four layers cannot show through. They are deliberately
+     not tagged `data-motion`, which would force them all visible. */
+  [data-hero-slide][data-active="false"] {
+    opacity: 0 !important;
+    visibility: hidden !important;
+  }
+
+  /* Progress fills become plain state dots. */
+  [data-hero-progress] {
+    opacity: 0 !important;
+  }
+
+  [data-hero-dot][data-active="true"] [data-hero-track] {
+    background-color: var(--color-glacier) !important;
+  }
 }
 
 /* ---------------------------------------------------------------------------
