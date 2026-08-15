@@ -20,10 +20,9 @@ import jpeg from "jpeg-js";
 
 import { heroSlides, type HeroSlide } from "../src/content/hero-slides.ts";
 import {
-  BED,
   CONTRAST_TARGETS,
-  bedAlphaAt,
   moodAlphaAt,
+  shadowAlpha,
 } from "../src/lib/hero-scrim.ts";
 
 /* ------------------------------------------------------------------ layout */
@@ -83,9 +82,12 @@ type Band = { name: string; y0: number; y1: number; x0: number; x1: number };
 /** Where each run of text lands, and the copy block that encloses them. */
 function layout(slide: HeroSlide, vw: number, vh: number) {
   const t = typeScale(vw);
-  const gutter = vw >= 1024 ? 48 : 24; // .shell padding-inline
-  const shellW = Math.min(1408, vw) - gutter * 2;
-  const copyW = Math.min(60 * CH * t.base, shellW);
+  // .shell — max-width 90rem, padding-inline clamp(20px, 5vw, 72px)
+  const gutter = clamp(20, 0.05 * vw, 72);
+  const shellW = Math.min(1440, vw) - gutter * 2;
+  // max-w-[58ch], xl:max-w-[min(58ch,46%)]
+  const measure = 58 * CH * t.base;
+  const copyW = Math.min(measure, vw >= 1280 ? shellW * 0.46 : shellW);
 
   // Headline size: text-4xl, sm:text-5xl, xl:text-6xl
   const hSize = vw >= 1280 ? t.text6xl : vw >= 640 ? t.text5xl : t.text4xl;
@@ -118,9 +120,8 @@ function layout(slide: HeroSlide, vw: number, vh: number) {
 
   // justify-center inside a container with pb-[10svh]
   const top = (vh * 0.9 - blockH) / 2;
-  const left = vw >= 1024 ? gutter + Math.max(0, (vw - 1408) / 2) : gutter;
+  const left = gutter + Math.max(0, (vw - 1440) / 2);
 
-  // The bed is anchored to the whole copy block, so it keeps the full width.
   const box = { x0: left, y0: top, x1: left + copyW, y1: top + blockH };
 
   let y = top;
@@ -223,12 +224,14 @@ const SAMPLE_STEP = 2;
  * behind a letter does not make a headline unreadable, and gating on it forces
  * exactly the over-darkening this rewrite removes. The absolute worst pixel is
  * still reported alongside, so nothing is hidden.
+ *
+ * Two layers darken the backdrop: the full-bleed mood gradient, and the text
+ * shadow the glyphs carry — see `shadowAlpha` for how the latter is modelled.
  */
 function backdropLuminance(
   img: Decoded,
   slide: HeroSlide,
   band: Band,
-  box: { x0: number; y0: number; x1: number; y1: number },
   vw: number,
   vh: number,
   strength: number,
@@ -249,6 +252,10 @@ function backdropLuminance(
   const offY = -vh * 0.06 + (mediaH - drawH) * posY;
 
   const samples: { rgb: number[]; lum: number }[] = [];
+  const shadow = shadowAlpha(
+    band.name === "headline" ? "display" : "small",
+    strength,
+  );
 
   for (let y = band.y0; y < band.y1; y += SAMPLE_STEP) {
     for (let x = band.x0; x < band.x1; x += SAMPLE_STEP) {
@@ -260,9 +267,7 @@ function backdropLuminance(
         [img.data[i], img.data[i + 1], img.data[i + 2]],
         filter,
       );
-      const alpha =
-        1 -
-        (1 - moodAlphaAt(x, y, vw, vh)) * (1 - bedAlphaAt(x, y, box, strength));
+      const alpha = 1 - (1 - moodAlphaAt(x, y, vw, vh)) * (1 - shadow);
       const rgb = pixel.map((c, k) => c * (1 - alpha) + SUMMIT[k] * alpha);
       samples.push({ rgb, lum: luminance(rgb) });
     }
@@ -327,7 +332,6 @@ async function main() {
             img,
             slide,
             band,
-            box,
             bp.w,
             bp.h,
             strength,
@@ -352,9 +356,12 @@ async function main() {
               : "FAIL";
 
         if (status !== "PASS") {
-          // Smallest strength in [0,1] that clears the target.
+          // Smallest strength that clears the target. Values above 1 are
+          // meaningful now that the field scales the text shadow rather than a
+          // background panel; 2 is where the shadow starts to look like a
+          // sticker, so that is the ceiling.
           let lo = slide.scrimStrength ?? 1;
-          let hi = 1;
+          let hi = 2;
           let found = Infinity;
           for (let i = 0; i < 12 && lo <= hi; i++) {
             const mid = (lo + hi) / 2;
@@ -393,8 +400,11 @@ function print(rows: Row[], needed: Map<string, number>, ridgeNotes: string[]) {
     `  targets: small text ${CONTRAST_TARGETS.smallText}:1 · headline (large) ${CONTRAST_TARGETS.largeText}:1`,
   );
   console.log(
-    `  bed: ${BED.alpha} peak, feathering to 0 at ${BED.feather * 100}% · ratios are 95th-percentile backdrop\n`,
+    `  layers: mood gradient (full-bleed) + text shadow` +
+      ` — effective shadow alpha ${shadowAlpha("display").toFixed(2)} display,` +
+      ` ${shadowAlpha("small").toFixed(2)} small`,
   );
+  console.log("  ratios are 95th-percentile backdrop\n");
 
   const head = [
     pad("slide", 11),
@@ -439,7 +449,7 @@ function print(rows: Row[], needed: Map<string, number>, ridgeNotes: string[]) {
     console.log("\n  Suggested scrimStrength in src/content/hero-slides.ts:");
     for (const [id, value] of needed) {
       console.log(
-        `    ${id}: ${Number.isFinite(value) ? value.toFixed(2) : "> 1 — reshoot, re-crop, or set an imageFilter"}`,
+        `    ${id}: ${Number.isFinite(value) ? value.toFixed(2) : "> 2 — reshoot, re-crop, or set an imageFilter"}`,
       );
     }
   }

@@ -21,7 +21,7 @@
  * component. Run `pnpm check:hero`; it measures each image and prints the
  * minimum `scrimStrength` that would make it pass. Set that value on the slide.
  *
- *   scrimStrength — 0–1, multiplies the text bed's opacity. Default 1.
+ *   scrimStrength — 0–2, multiplies the copy's text-shadow alphas. Default 1.
  *   imageFilter   — extra CSS filter, appended after the base treatment.
  *   textPosition  — "left" (default) or "center".
  *
@@ -52,8 +52,9 @@ export type HeroSlide = {
   /** CSS object-position. Defaults to "center". */
   focalPoint?: string;
   /**
-   * 0–1, multiplies the text bed's opacity for this slide only. Default 1.
-   * `pnpm check:hero` prints the minimum value each image needs.
+   * 0–2, multiplies the copy's text-shadow alphas for this slide only.
+   * Default 1. `pnpm check:hero` prints the minimum value each image needs.
+   * There is no background panel to scale — legibility rides on the type.
    */
   scrimStrength?: number;
   /**

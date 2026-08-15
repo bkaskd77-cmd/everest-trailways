@@ -8,6 +8,7 @@ type TextRevealProps = {
   /** One entry per line. Lines are revealed in order from behind a mask. */
   lines: readonly string[];
   className?: string;
+  style?: React.CSSProperties;
   as?: "h1" | "h2" | "h3" | "p";
   /** Seconds between lines. */
   stagger?: number;
@@ -33,6 +34,7 @@ type TextRevealProps = {
 export function TextReveal({
   lines,
   className,
+  style,
   as: Component = "h2",
   stagger = 0.09,
   delay = 0,
@@ -41,7 +43,7 @@ export function TextReveal({
 }: TextRevealProps) {
   if (!animate) {
     return (
-      <Component className={className}>
+      <Component className={className} style={style}>
         {lines.map((line) => (
           <span key={line} className="block pb-[0.08em]">
             {line}
@@ -60,7 +62,7 @@ export function TextReveal({
         } as const);
 
   return (
-    <Component className={className}>
+    <Component className={className} style={style}>
       {lines.map((line, index) => (
         // The clipping box. `pb` leaves room for descenders so they are not
         // shaved off by the mask.

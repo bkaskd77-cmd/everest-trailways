@@ -7,7 +7,7 @@ import type { HeroSlide } from "@/content/hero-slides";
 import { MagneticButton, TextReveal } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import { DURATION, EASE, STAGGER } from "@/lib/motion";
-import { textBedCss, textBedInset } from "@/lib/hero-scrim";
+import { boxShadowCss, textShadowCss } from "@/lib/hero-scrim";
 import { cn } from "@/lib/utils";
 import { COPY_OFFSET } from "@/components/hero/use-hero-carousel";
 
@@ -37,8 +37,7 @@ type HeroCopyProps = {
    * That slide's copy renders as plain elements with no Motion component
    * anywhere in it. Rendering the final variant state was not enough: Motion
    * still writes inline styles when it mounts, and that repaint landed after
-   * ~1.2s of hydration, which Chrome then recorded as the LCP. Measured, it
-   * moved LCP from 2.96s to well under the 2.5s bar.
+   * ~1.2s of hydration, which Chrome then recorded as the LCP.
    *
    * The entrance is for slide *changes*, which is the only place it does any
    * work anyway.
@@ -47,18 +46,26 @@ type HeroCopyProps = {
 };
 
 /**
- * The text block. Deliberately does not crossfade with the photograph — it
- * re-enters a beat later, which is what makes a slide change read as directed
- * rather than automatic.
+ * The text block.
  *
- * The parent remounts this on every slide change (via `key`), so the entrance
- * replays without any imperative animation control.
+ * Legibility lives on the type: layered shadows, no background panel. A scrim
+ * anchored to this block is what put two hard vertical edges across the
+ * photograph — shadows follow the glyphs and have no box to clip against.
+ *
+ * Deliberately does not crossfade with the photograph — it re-enters a beat
+ * later, which is what makes a slide change read as directed rather than
+ * automatic. The parent remounts this on every change (via `key`), so the
+ * entrance replays without any imperative animation control.
  */
 export function HeroCopy({ slide, index, total, animate }: HeroCopyProps) {
   const centred = slide.textPosition === "center";
-  const eyebrowClass = "text-glacier/85 text-xs tracking-[0.24em] uppercase";
+  const strength = slide.scrimStrength;
+  const displayShadow = { textShadow: textShadowCss("display", strength) };
+  const smallShadow = { textShadow: textShadowCss("small", strength) };
+
+  const eyebrowClass = "text-glacier text-xs tracking-[0.24em] uppercase";
   const sublineClass = cn(
-    "text-glacier/80 max-w-xl text-lg",
+    "text-glacier/90 max-w-xl text-lg",
     centred && "mx-auto",
   );
   const ctaRowClass = cn(
@@ -72,6 +79,7 @@ export function HeroCopy({ slide, index, total, animate }: HeroCopyProps) {
       lines={splitHeadline(slide.headline)}
       delay={COPY_OFFSET}
       animate={animate}
+      style={displayShadow}
       // Steps down on small screens: at text-5xl the longer headlines ran to
       // four lines at 360px.
       className="mt-5 font-display text-4xl tracking-tight text-glacier sm:text-5xl xl:text-6xl"
@@ -91,7 +99,10 @@ export function HeroCopy({ slide, index, total, animate }: HeroCopyProps) {
           asChild
           variant="ghost"
           size="lg"
-          className="border border-glacier/30 bg-transparent text-glacier hover:bg-glacier/10 hover:text-glacier"
+          // The border and label both carry the shadow, so the button keeps its
+          // shape against a bright frame.
+          style={{ ...smallShadow, boxShadow: boxShadowCss("small", strength) }}
+          className="border border-glacier/45 bg-transparent text-glacier hover:bg-glacier/10 hover:text-glacier"
         >
           <Link href={slide.ctaSecondary.href}>{slide.ctaSecondary.label}</Link>
         </Button>
@@ -104,26 +115,14 @@ export function HeroCopy({ slide, index, total, animate }: HeroCopyProps) {
       role="group"
       aria-roledescription="slide"
       aria-label={`Slide ${index + 1} of ${total}`}
-      // `isolate` keeps the bed's negative z-index inside this block, so it can
-      // never slip behind the mood layer.
+      // 58ch keeps the measure readable; 46% stops the headline running so wide
+      // on a large frame that it reads as centred. Below xl the frame is too
+      // narrow for the percentage to be anything but cramped.
       className={cn(
-        "relative isolate max-w-[60ch]",
+        "max-w-[58ch] xl:max-w-[min(58ch,46%)]",
         centred && "mx-auto text-center",
       )}
     >
-      {/* The text bed. Absolutely positioned against this block and inflated
-          off it, so it grows and shrinks with the copy rather than with the
-          viewport. This is the only layer responsible for legibility; per-slide
-          `scrimStrength` scales it. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -z-10"
-        style={{
-          inset: textBedInset(),
-          backgroundImage: textBedCss(slide.scrimStrength ?? 1),
-        }}
-      />
-
       {animate ? (
         <>
           <motion.p
@@ -132,6 +131,7 @@ export function HeroCopy({ slide, index, total, animate }: HeroCopyProps) {
             initial="hidden"
             animate="visible"
             transition={{ delay: COPY_OFFSET }}
+            style={smallShadow}
             className={eyebrowClass}
           >
             {slide.region}
@@ -146,7 +146,12 @@ export function HeroCopy({ slide, index, total, animate }: HeroCopyProps) {
             animate="visible"
             className="mt-6"
           >
-            <motion.p data-motion variants={item} className={sublineClass}>
+            <motion.p
+              data-motion
+              variants={item}
+              style={smallShadow}
+              className={sublineClass}
+            >
               {slide.subline}
             </motion.p>
             <motion.div data-motion variants={item} className={ctaRowClass}>
@@ -156,13 +161,14 @@ export function HeroCopy({ slide, index, total, animate }: HeroCopyProps) {
         </>
       ) : (
         <>
-          {/* Not --color-sky for the eyebrow: measured against the brightest
-              pixel of these photographs it tops out around 4.3:1, and no
-              reasonable scrim fixes that without flattening the image. */}
-          <p className={eyebrowClass}>{slide.region}</p>
+          <p style={smallShadow} className={eyebrowClass}>
+            {slide.region}
+          </p>
           {headline}
           <div className="mt-6">
-            <p className={sublineClass}>{slide.subline}</p>
+            <p style={smallShadow} className={sublineClass}>
+              {slide.subline}
+            </p>
             <div className={ctaRowClass}>{actions}</div>
           </div>
         </>

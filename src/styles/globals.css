@@ -267,14 +267,12 @@
   font-feature-settings: "tnum" 1;
 }
 
-/* The page gutter. One place to change the shell's horizontal rhythm. */
+/* The page gutter. One place to change the shell's horizontal rhythm.
+   Header, hero and footer all use it, which is what keeps the wordmark and the
+   hero eyebrow on the same left edge at every width. */
 @utility shell {
   margin-inline: auto;
   width: 100%;
-  max-width: 88rem;
-  padding-inline: 1.5rem;
-
-  @media (width >= 64rem) {
-    padding-inline: 3rem;
-  }
+  max-width: 90rem;
+  padding-inline: clamp(20px, 5vw, 72px);
 }
