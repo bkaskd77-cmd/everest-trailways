@@ -7,7 +7,8 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "pnpm check:departures && pnpm check:trust && pnpm check:matcher && next build",
+    "build": "pnpm check:departures && pnpm check:trust && pnpm check:matcher && pnpm check:motion && next build",
+    "perf": "pnpm check:motion && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/measure-perf.ts",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
@@ -17,7 +18,8 @@
     "tune:hero": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-hero-contrast.ts --tune",
     "check:trust": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-trust.ts",
     "check:departures": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-departures.ts",
-    "check:matcher": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-matcher.ts"
+    "check:matcher": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-matcher.ts",
+    "check:motion": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-motion.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",
@@ -44,6 +46,7 @@
     "jpeg-js": "^0.4.4",
     "prettier": "^3.9.6",
     "prettier-plugin-tailwindcss": "^0.8.1",
+    "puppeteer": "^25.7.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   },

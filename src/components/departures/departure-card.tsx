@@ -89,7 +89,14 @@ function GuaranteeLine({ departure }: { departure: Departure }) {
   );
 }
 
-export function DepartureCard({ departure }: { departure: Departure }) {
+export function DepartureCard({
+  departure,
+  index = 0,
+}: {
+  departure: Departure;
+  /** Position in the grid. Offsets the seat meter so the row reads downward. */
+  index?: number;
+}) {
   const status = departureStatus(departure);
   const inactive = status === "full" || status === "closed";
   const supplement = departure.singleSupplementUSD;
@@ -110,9 +117,14 @@ export function DepartureCard({ departure }: { departure: Departure }) {
           fill
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
           quality={70}
+          // The pointer parallax lives on `translate` and the hover on `scale`
+          // — both independent transform properties, so neither clobbers the
+          // other. The resting scale is what gives the 8px slide somewhere to
+          // go without exposing an edge of the frame.
+          style={{ translate: "var(--par-x, 0px) var(--par-y, 0px)" }}
           className={cn(
-            "object-cover transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]",
-            !inactive && "group-hover:scale-[1.04]",
+            "scale-[1.06] object-cover transition-[scale,translate] duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]",
+            !inactive && "group-hover:scale-[1.09]",
           )}
         />
         <p
@@ -152,12 +164,14 @@ export function DepartureCard({ departure }: { departure: Departure }) {
       <div className={cn(PAD, "pt-4")}>
         <div className="min-h-28 rounded-md bg-muted/60 p-3">
           <GuaranteeLine departure={departure} />
-          <SeatMeter departure={departure} status={status} />
-          {/* "decided by" only survives in the needs-n state — see
-              guaranteeMeta, which the departures guard asserts against. */}
-          <p className="mt-2 tabular text-xs text-muted-foreground">
-            {guaranteeMeta(departure)}
-          </p>
+          {/* The meter owns the line beneath it so the two can be beats of one
+              sequence rather than two things that fade in near each other. */}
+          <SeatMeter
+            departure={departure}
+            status={status}
+            meta={guaranteeMeta(departure)}
+            index={index}
+          />
         </div>
       </div>
 
@@ -231,9 +245,13 @@ export function DepartureCard({ departure }: { departure: Departure }) {
       </div>
 
       {/* 9 — third action, deliberately quieter and on its own line so it never
-             competes with "View departure". */}
+             competes with "View departure". It sits on a rule inside the card's
+             own padding: as a bare link under the actions it read as though it
+             had fallen out of the bottom of the card on the shorter ones. */}
       <div className={cn(PAD, "pb-5")}>
-        <AskPanel departure={departure} />
+        <div className="border-t border-border pt-3">
+          <AskPanel departure={departure} />
+        </div>
       </div>
     </article>
   );

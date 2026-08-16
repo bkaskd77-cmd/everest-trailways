@@ -101,7 +101,7 @@ export function AskPanel({
       <SheetTrigger asChild>
         <button
           type="button"
-          className="mt-3 inline-flex cursor-pointer items-center gap-1.5 text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+          className="inline-flex cursor-pointer items-center gap-1.5 text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
         >
           <MessageSquare aria-hidden className="size-3.5 shrink-0" />
           Ask about this departure

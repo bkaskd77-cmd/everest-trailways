@@ -101,7 +101,7 @@ function nextLadderQuestion(
 
 const byId = new Map(departures.map((d) => [d.id, d]));
 
-export function TrekMatcher() {
+export function TrekMatcher({ chrome = true }: { chrome?: boolean }) {
   const [steps, setSteps] = React.useState<Step[]>([]);
   const [question, setQuestion] = React.useState<MatcherQuestion | null>(
     OPENING,
@@ -298,7 +298,13 @@ export function TrekMatcher() {
   React.useEffect(() => () => inFlight.current?.abort(), []);
 
   return (
-    <div className="rounded-lg border border-border bg-card p-5 sm:p-8">
+    <div
+      className={cn(
+        // Inside the matcher cell the surface is already provided, so the panel
+        // drops its own frame rather than drawing a card within a card.
+        chrome && "rounded-lg border border-border bg-card p-5 sm:p-8",
+      )}
+    >
       {/* What has been said, as chips you can go back and change. */}
       {steps.length > 0 && (
         <ul className="mb-6 flex flex-wrap gap-2">

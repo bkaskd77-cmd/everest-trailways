@@ -1,8 +1,7 @@
-import {
-  CARD_TRACKS,
-  DepartureCard,
-} from "@/components/departures/departure-card";
-import { Reveal, StaggerGroup } from "@/components/motion";
+import { DepartureCard } from "@/components/departures/departure-card";
+import { DepartureCell } from "@/components/departures/departure-cell";
+import { MatcherCell } from "@/components/matcher/matcher-cell";
+import { StaggerGroup } from "@/components/motion";
 import type { Departure } from "@/content/departures";
 
 /**
@@ -23,6 +22,10 @@ import type { Departure } from "@/content/departures";
  * suppressed inside each card — a subgrid overrides the gutters of the tracks
  * it spans but not the ones at its outer edges, which is exactly the split we
  * want: no gaps between a card's own tracks, a full gutter between card rows.
+ *
+ * The seventh cell is the trek matcher. It is here rather than above the grid
+ * because "none of these six fit?" is only a question worth asking once the six
+ * have been seen.
  */
 export function DepartureGrid({ departures }: { departures: Departure[] }) {
   return (
@@ -30,11 +33,12 @@ export function DepartureGrid({ departures }: { departures: Departure[] }) {
       as="ul"
       className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3"
     >
-      {departures.map((departure) => (
-        <Reveal as="li" key={departure.id} className={CARD_TRACKS}>
-          <DepartureCard departure={departure} />
-        </Reveal>
+      {departures.map((departure, index) => (
+        <DepartureCell key={departure.id} index={index}>
+          <DepartureCard departure={departure} index={index} />
+        </DepartureCell>
       ))}
+      <MatcherCell />
     </StaggerGroup>
   );
 }

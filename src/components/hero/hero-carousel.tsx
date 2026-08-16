@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { useTransform } from "motion/react";
+import * as m from "motion/react-m";
 
 import { HeroCopy } from "@/components/hero/hero-copy";
 import { HeroIndicators } from "@/components/hero/hero-indicators";
@@ -8,9 +10,10 @@ import { HeroMedia } from "@/components/hero/hero-media";
 import { Ridge } from "@/components/hero/ridge";
 import { ScrollCue } from "@/components/hero/scroll-cue";
 import { useHeroCarousel } from "@/components/hero/use-hero-carousel";
-import { Parallax } from "@/components/motion";
+import { useSeamProgress } from "@/components/motion";
 import { heroSlides } from "@/content/hero-slides";
 import { moodGradientCss } from "@/lib/hero-scrim";
+import { SEAM } from "@/lib/motion";
 
 /** Horizontal travel before a touch drag counts as a swipe. */
 const SWIPE_THRESHOLD = 48;
@@ -31,6 +34,12 @@ export function HeroCarousel() {
   } = useHeroCarousel({ count: total, rootRef });
 
   const touchStart = React.useRef<{ x: number; y: number } | null>(null);
+
+  // The ridge is one half of the hero-to-band seam. It drifts upward across
+  // exactly the hero's exit, and the band's top edge draws over the back half
+  // of the same value — see <Seam> and SEAM in lib/motion.ts.
+  const seam = useSeamProgress();
+  const ridgeY = useTransform(seam, [0, 1], [0, -SEAM.ridgeDriftPx]);
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === "ArrowRight") {
@@ -113,12 +122,15 @@ export function HeroCarousel() {
       {/* Ridgeline: above the photo, below the text. Decorative only — it sits
           entirely below the copy block at every breakpoint, which
           `pnpm check:hero` asserts. */}
-      <Parallax
-        distance={24}
-        className="pointer-events-none absolute inset-x-0 bottom-0 z-10"
-      >
-        <Ridge className="h-[30vh] w-full opacity-[0.35]" />
-      </Parallax>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
+        <m.div
+          data-motion
+          className="will-change-transform"
+          style={{ y: ridgeY }}
+        >
+          <Ridge className="h-[30vh] w-full opacity-[0.35]" />
+        </m.div>
+      </div>
 
       {/* Hand off to the band below. It resolves to --color-band, the exact
           surface the trust strip paints, so the two meet without a seam. Short

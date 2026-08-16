@@ -1,4 +1,7 @@
+# Puppeteer's postinstall downloads the pinned Chrome build that `pnpm perf`
+# drives. It is the one dependency here allowed to run install scripts.
 allowBuilds:
-  esbuild: set this to true or false
+  esbuild: false
+  puppeteer: true
   sharp: false
   unrs-resolver: false

@@ -311,6 +311,50 @@
    4. Utilities
 --------------------------------------------------------------------------- */
 
+/**
+ * Invert everything inside onto summit, in both themes.
+ *
+ * The matcher cell is a dark instrument sitting in a grid of light cards, and
+ * it stays dark when the whole site is dark. Re-pointing the semantic tokens
+ * here means every child — buttons, inputs, hairlines, the seat meter, the
+ * shadcn primitives — inherits the right palette without needing an inverted
+ * variant written for it. `--color-prayer-deep` is redefined rather than
+ * excepted, so `text-prayer-deep` resolves to something readable on summit
+ * without every call site needing to know where it is.
+ */
+@utility on-summit {
+  color-scheme: dark;
+
+  --background: var(--color-summit);
+  --foreground: var(--color-glacier);
+  --muted: var(--color-summit-raised);
+  --muted-foreground: color-mix(
+    in oklab,
+    var(--color-glacier) 68%,
+    var(--color-summit)
+  );
+  --card: var(--color-summit-raised);
+  --card-foreground: var(--color-glacier);
+  --popover: var(--color-summit-raised);
+  --popover-foreground: var(--color-glacier);
+  --secondary: var(--color-summit-raised);
+  --secondary-foreground: var(--color-glacier);
+  --accent: #1a3b4c;
+  --accent-foreground: var(--color-glacier);
+  --border: color-mix(in oklab, var(--color-glacier) 20%, var(--color-summit));
+  --input: color-mix(in oklab, var(--color-glacier) 26%, var(--color-summit));
+  --verified: var(--color-pine-light);
+  --info: var(--color-sky);
+
+  --color-prayer-deep: var(--color-prayer-light);
+
+  --meter-track: #2b4a5c;
+  --meter-guaranteed: #6fa893;
+  --meter-filling: #e87a45;
+  --meter-pending: #a8a296;
+  --meter-inactive: #a8a296;
+}
+
 /* Prices and altitudes must align in a column. */
 @utility tabular {
   font-variant-numeric: tabular-nums;
