@@ -22,6 +22,16 @@ export type AskSource = {
   kind: "canned" | "assistant";
   questions: AskQuestion[];
   answer: (questionId: string, departure: Departure) => string;
+  /**
+   * Streams an answer, calling `onDelta` with each new fragment and resolving
+   * with the whole thing. Optional: a source that only has canned prose does
+   * not implement it, and the panel falls back to `answer`.
+   */
+  answerStream?: (
+    input: { questionId?: string; text: string; departure: Departure },
+    onDelta: (fragment: string) => void,
+    signal?: AbortSignal,
+  ) => Promise<string>;
 };
 
 /**
@@ -64,5 +74,72 @@ export const cannedAskSource: AskSource = {
       default:
         return "";
     }
+  },
+};
+
+/**
+ * The same endpoint the trek matcher uses, scoped to one departure.
+ *
+ * There is deliberately no second prompt: `/api/match` builds its system prompt
+ * from `buildSystemPrompt({ departureId })`, so the hard constraints that
+ * govern the matcher govern this panel too. A separate "ask about this trip"
+ * prompt would be a second place for those rules to drift.
+ *
+ * `answer` still returns the canned prose, which is what the panel shows if the
+ * request fails or the assistant is unavailable — the panel is never empty.
+ */
+export const assistantAskSource: AskSource = {
+  kind: "assistant",
+  questions: cannedAskSource.questions,
+  answer: cannedAskSource.answer,
+  async answerStream({ questionId, text, departure }, onDelta, signal) {
+    const response = await fetch("/api/match", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        turns: [{ role: "user", content: text }],
+        scope: { departureId: departure.id, questionId },
+      }),
+      signal,
+    });
+
+    if (!response.ok || !response.body) throw new Error("unavailable");
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let streamed = "";
+    let final = "";
+
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let newline = buffer.indexOf("\n");
+      while (newline >= 0) {
+        const line = buffer.slice(0, newline).trim();
+        buffer = buffer.slice(newline + 1);
+        newline = buffer.indexOf("\n");
+        if (!line) continue;
+        try {
+          const frame = JSON.parse(line) as {
+            t: string;
+            v?: string;
+            result?: { message?: string };
+          };
+          if (frame.t === "delta" && frame.v) {
+            streamed += frame.v;
+            onDelta(frame.v);
+          } else if (frame.t === "result" && frame.result?.message) {
+            final = frame.result.message;
+          }
+        } catch {
+          continue;
+        }
+      }
+    }
+
+    return final || streamed;
   },
 };

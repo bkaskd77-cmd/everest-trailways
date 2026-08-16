@@ -23,7 +23,7 @@ export function FeaturedDepartures() {
   return (
     <section
       aria-labelledby="departures-heading"
-      className="bg-band text-foreground"
+      className="bg-band-sunk text-foreground"
     >
       <script
         type="application/ld+json"

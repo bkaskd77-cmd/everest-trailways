@@ -122,6 +122,25 @@
      *black*, which overshoots on the way to a near-white band. */
   --band: var(--color-glacier);
   --band-rgb: 245 243 238;
+
+  /* A half-step below the band. The page reads as three grounds — hero, trust
+     band, departures — rather than one continuous surface separated by a
+     hairline nobody notices. Cards (snow) lift off it; the trust band sits
+     level with the page. */
+  --band-sunk: #f0eee7;
+
+  /* Seat meter. Kept as explicit values rather than references so
+     `pnpm check:departures` can read them straight out of this file and assert
+     the contrast of every bar against the track; it also asserts each bar
+     equals the brand step named in the comment, so these cannot drift.
+     Measured against --meter-track (L 0.5523):
+       guaranteed 4.25:1 · filling 3.67:1 · pending 4.01:1 — all clear the 3:1
+     WCAG 1.4.11 floor for non-text UI. */
+  --meter-track: #c9c4b5;
+  --meter-guaranteed: #2f5d4f; /* --color-pine */
+  --meter-filling: #a33f12; /* --color-prayer-deep */
+  --meter-pending: #5c584d; /* --color-stone-deep */
+  --meter-inactive: #5c584d; /* --color-stone-deep — full and closed share it */
 }
 
 .dark {
@@ -157,6 +176,19 @@
 
   --band: var(--color-summit-raised);
   --band-rgb: 18 48 63;
+
+  /* Dark inverts the relationship deliberately: the departures ground drops
+     back toward summit so the summit-raised cards read as lifted. Same
+     three-zone reading, same half-step. */
+  --band-sunk: #0e2734;
+
+  /* Measured against --meter-track (L 0.0621):
+       guaranteed 3.43:1 · filling 3.26:1 · pending 3.69:1 */
+  --meter-track: #2b4a5c;
+  --meter-guaranteed: #6fa893; /* --color-pine-light */
+  --meter-filling: #e87a45; /* --color-prayer-light */
+  --meter-pending: #a8a296; /* --color-stone-light */
+  --meter-inactive: #a8a296; /* --color-stone-light */
 }
 
 @theme inline {
@@ -178,6 +210,12 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-band: var(--band);
+  --color-band-sunk: var(--band-sunk);
+  --color-meter-track: var(--meter-track);
+  --color-meter-guaranteed: var(--meter-guaranteed);
+  --color-meter-filling: var(--meter-filling);
+  --color-meter-pending: var(--meter-pending);
+  --color-meter-inactive: var(--meter-inactive);
   --color-verified: var(--verified);
   --color-info: var(--info);
   --color-destructive: var(--destructive);

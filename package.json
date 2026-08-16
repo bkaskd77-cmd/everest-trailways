@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "pnpm check:departures && pnpm check:trust && next build",
+    "build": "pnpm check:departures && pnpm check:trust && pnpm check:matcher && next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
@@ -16,9 +16,11 @@
     "check:hero": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-hero-contrast.ts",
     "tune:hero": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-hero-contrast.ts --tune",
     "check:trust": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-trust.ts",
-    "check:departures": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-departures.ts"
+    "check:departures": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-departures.ts",
+    "check:matcher": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-matcher.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.117.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.31.0",
