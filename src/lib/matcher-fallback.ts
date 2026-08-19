@@ -8,6 +8,7 @@ import {
 } from "../content/departures.ts";
 import {
   MAX_MATCHES,
+  type Beyond,
   type Match,
   type MatcherResult,
 } from "./matcher-types.ts";
@@ -63,6 +64,16 @@ const MEDICAL_ALTITUDE_CEILING_M = 3000;
  * purely to round the list up to three.
  */
 const SCORE_BAND = 5;
+
+/**
+ * How many near-misses to show under the matches.
+ *
+ * Two. This group exists so someone can see that the good option they half
+ * expected was considered and ruled out, not so they can browse everything we
+ * refused them — a long list of things that do not fit reads as a menu, which
+ * is exactly the framing it must not have.
+ */
+const BEYOND_LIMIT = 2;
 
 export type FallbackAnswers = {
   maxDays?: number;
@@ -302,9 +313,98 @@ function reasonFor(d: Departure, a: FallbackAnswers, now: Date): string {
 }
 
 /**
+ * How badly a departure misses, for ordering the beyond group.
+ *
+ * The point of that group is "the good option you were half expecting was
+ * considered, and here is why it is not on the list" — so it has to show the
+ * departures that come closest, not the ones that would have scored best if
+ * the constraints did not exist. A trip that is one month out of the window is
+ * far more useful to see than one that is 2,364 m over the ceiling.
+ *
+ * Lower is nearer. Counts how many of the three it breaks, then by how much.
+ */
+function breachSeverity(d: Departure, answers: FallbackAnswers): number {
+  const stated = answers.altitudeCeilingM;
+  const medical = answers.medicalConcern
+    ? MEDICAL_ALTITUDE_CEILING_M
+    : undefined;
+  const ceiling =
+    stated !== undefined && medical !== undefined
+      ? Math.min(stated, medical)
+      : (stated ?? medical);
+
+  let broken = 0;
+  let magnitude = 0;
+
+  if (ceiling !== undefined && d.maxAltitudeM > ceiling) {
+    broken += 1;
+    // Metres over, scaled so a thousand of them weighs about as much as a
+    // fortnight of overrun.
+    magnitude += (d.maxAltitudeM - ceiling) / 1000;
+  }
+  if (answers.maxDays !== undefined && d.days > answers.maxDays) {
+    broken += 1;
+    magnitude += (d.days - answers.maxDays) / 14;
+  }
+  if (answers.months !== undefined && !answers.months.includes(monthOf(d))) {
+    broken += 1;
+    magnitude += 0.5;
+  }
+
+  return broken * 100 + magnitude;
+}
+
+/**
  * Score, do not filter, wherever a soft preference is involved — the honest
  * answer to "I want wildlife in October" is sometimes "the wildlife trip is in
  * February", and that is worth saying rather than returning nothing.
+ */
+/**
+ * The hard constraints.
+ *
+ * Altitude experience is not a taste. Someone who tells us they have never been
+ * above 3,000 m and is then shown a 4,984 m pass — with a note underneath
+ * admitting it is 1,984 m above anything they have done — has been sold to, not
+ * matched. The same goes for the days they actually have and the window they
+ * can actually travel in: those are facts about their trip, not preferences to
+ * be weighed against a good score.
+ *
+ * So these three are filters, and nothing that fails one can appear as a match.
+ * What a failing departure gets instead is a sentence naming the breach and its
+ * size, in a separate group the person can read and dismiss.
+ *
+ * Returns null when the departure breaks nothing.
+ */
+export function hardBreach(
+  d: Departure,
+  answers: FallbackAnswers,
+): string | null {
+  const stated = answers.altitudeCeilingM;
+  const medical = answers.medicalConcern
+    ? MEDICAL_ALTITUDE_CEILING_M
+    : undefined;
+  const ceiling =
+    stated !== undefined && medical !== undefined
+      ? Math.min(stated, medical)
+      : (stated ?? medical);
+
+  if (ceiling !== undefined && d.maxAltitudeM > ceiling) {
+    return `${d.maxAltitudeM.toLocaleString("en-GB")} m — ${(d.maxAltitudeM - ceiling).toLocaleString("en-GB")} m above the ceiling you gave us.`;
+  }
+  if (answers.maxDays !== undefined && d.days > answers.maxDays) {
+    return `${d.days} days — ${d.days - answers.maxDays} more than the ${answers.maxDays} you have.`;
+  }
+  if (answers.months !== undefined && !answers.months.includes(monthOf(d))) {
+    return `departs ${formatDate(d.departsOn)} — outside ${listMonths(answers.months)}.`;
+  }
+  return null;
+}
+
+/**
+ * Score, do not filter, wherever a soft preference is involved — the honest
+ * answer to "I want wildlife in October" is sometimes "the wildlife trip is in
+ * February", and that is worth saying rather than returning nothing. Hard
+ * constraints are handled above, before any of this runs.
  */
 export function fallbackMatch(
   answers: FallbackAnswers,
@@ -316,25 +416,36 @@ export function fallbackMatch(
 
   const open = departures.filter((d) => bookable(d, now));
 
-  // Hard filters. These are the ones where a match would be wrong, not just
-  // imperfect.
-  let pool = open;
-  const ceiling = answers.medicalConcern
-    ? MEDICAL_ALTITUDE_CEILING_M
-    : undefined;
-  if (ceiling !== undefined) {
-    pool = pool.filter((d) => d.maxAltitudeM <= ceiling);
+  const breached = new Map<string, string>();
+  for (const d of open) {
+    const breach = hardBreach(d, answers);
+    if (breach) breached.set(d.id, breach);
   }
-  if (answers.maxDays !== undefined) {
-    pool = pool.filter((d) => d.days <= answers.maxDays!);
-  }
+
+  let pool = open.filter((d) => !breached.has(d.id));
+
+  // Fitness is a preference rather than a stated fact about the trip, so it
+  // narrows the pool but never sends anything to the beyond group.
   if (answers.fitness === "light") {
     pool = pool.filter((d) => d.difficulty !== "strenuous");
   }
 
-  // If they asked for something by name and it did not survive the filters, say
-  // so first and say why. Quietly returning three other treks is the answer
-  // that loses someone's trust — they asked a direct question.
+  const beyondPool = open
+    .filter((d) => breached.has(d.id))
+    .sort(
+      (a, b) =>
+        breachSeverity(a, answers) - breachSeverity(b, answers) ||
+        softScore(b, answers, now) - softScore(a, answers, now),
+    );
+
+  const beyond: Beyond[] = beyondPool.slice(0, BEYOND_LIMIT).map((d) => ({
+    id: d.id,
+    exceeds: breached.get(d.id)!,
+  }));
+
+  // If they asked for something by name and it did not survive, say so first
+  // and say why. Quietly returning three other treks is the answer that loses
+  // someone's trust — they asked a direct question.
   const named = answers.namedTrekId
     ? open.filter((d) => d.trekId === answers.namedTrekId)
     : [];
@@ -348,39 +459,13 @@ export function fallbackMatch(
       done: true,
       question: null,
       matches: [],
+      beyond,
       source: "fallback",
     };
   }
 
   const scored = pool
-    .map((d) => {
-      let score = 0;
-      if (answers.months?.includes(monthOf(d))) score += 4;
-      else if (answers.months) score -= 2;
-
-      const intents = TREK_INTENT[d.trekId] ?? [];
-      if (answers.intent && intents.includes(answers.intent)) score += 3;
-
-      if (typeof answers.altitudeCeilingM === "number") {
-        const over = d.maxAltitudeM - answers.altitudeCeilingM;
-        if (over <= 0) score += 2;
-        else if (over > 1500) score -= 3;
-        else if (over > 800) score -= 1;
-      }
-
-      if (answers.fitness === "trained" && d.difficulty !== "moderate")
-        score += 1;
-      if (answers.fitness === "light" && d.difficulty === "moderate")
-        score += 1;
-
-      const status = departureStatus(d, now);
-      if (status === "guaranteed") score += 2;
-      if (status === "filling") score += 1;
-
-      if (answers.wantsCheapest) score += (3000 - d.priceUSD) / 1000;
-
-      return { d, score };
-    })
+    .map((d) => ({ d, score: softScore(d, answers, now) }))
     .sort((a, b) => b.score - a.score || a.d.priceUSD - b.d.priceUSD);
 
   // Two or three, or however many genuinely fit. Padding the list out to three
@@ -396,33 +481,44 @@ export function fallbackMatch(
     caution: cautionFor(d, answers, now),
   }));
 
-  // Month is scored rather than filtered — "the wildlife trip is in February"
-  // is a more useful answer than an empty list. But if nothing came back in the
-  // months they gave, that has to be said out loud rather than left for them to
-  // spot in the dates.
-  const monthMissed =
-    answers.months !== undefined &&
-    matches.length > 0 &&
-    !matches.some((match) => {
-      const d = departures.find((x) => x.id === match.id);
-      return d ? answers.months!.includes(monthOf(d)) : false;
-    });
-
   const lead = answers.wantsCheapest
     ? `The lowest all-in price we currently have open is ${matches[0] ? nameOf(matches[0].id) : "below"}.`
     : `Here is what actually fits, and what to weigh against each.`;
 
-  const monthNote = monthMissed
-    ? `Nothing we have open in ${listMonths(answers.months!)} fits the rest of what you told us, so none of these are in that window — check the dates first.`
-    : "";
-
   return {
-    message: [...prefix, monthNote, lead].filter(Boolean).join(" "),
+    message: [...prefix, lead].filter(Boolean).join(" "),
     done: true,
     question: null,
     matches,
+    // Only worth showing when the matches did not already fill the list.
+    beyond: matches.length >= MAX_MATCHES ? [] : beyond,
     source: "fallback",
   };
+}
+
+/** Everything that is a preference rather than a stated fact about the trip. */
+function softScore(d: Departure, answers: FallbackAnswers, now: Date): number {
+  let score = 0;
+  if (answers.months?.includes(monthOf(d))) score += 4;
+
+  const intents = TREK_INTENT[d.trekId] ?? [];
+  if (answers.intent && intents.includes(answers.intent)) score += 3;
+
+  if (typeof answers.altitudeCeilingM === "number") {
+    const headroom = answers.altitudeCeilingM - d.maxAltitudeM;
+    if (headroom >= 0) score += 2;
+  }
+
+  if (answers.fitness === "trained" && d.difficulty !== "moderate") score += 1;
+  if (answers.fitness === "light" && d.difficulty === "moderate") score += 1;
+
+  const status = departureStatus(d, now);
+  if (status === "guaranteed") score += 2;
+  if (status === "filling") score += 1;
+
+  if (answers.wantsCheapest) score += (3000 - d.priceUSD) / 1000;
+
+  return score;
 }
 
 /**
@@ -475,17 +571,45 @@ function explainNothingFits(
     return "Everything we currently have open goes above 3,000 m, so we are not going to recommend any of it to you on the strength of a chat. Speak to your doctor first; if they clear you for altitude, tell us what they said and we will go through the itineraries with a guide.";
   }
 
+  // Name the constraints back, in their own words, rather than saying "no
+  // results". The person needs to know which of the three to loosen.
+  const clauses: string[] = [];
+  if (answers.altitudeCeilingM !== undefined) {
+    clauses.push(`under ${answers.altitudeCeilingM.toLocaleString("en-GB")} m`);
+  }
+  if (answers.months !== undefined) {
+    clauses.push(`departing in ${listMonths(answers.months)}`);
+  }
   if (answers.maxDays !== undefined) {
-    const shortest = [...open].sort((a, b) => a.days - b.days)[0];
-    if (shortest && shortest.days > answers.maxDays) {
-      return `Nothing we run fits ${answers.maxDays} days — the shortest departure open is ${shortest.trekName} at ${shortest.days} days (${formatDateRange(shortest.departsOn, shortest.returnsOn)}). We do not sell compressed versions of longer treks, because the days you would cut are the acclimatisation days. If you can find ${shortest.days} days, that one works.`;
-    }
-    const nearMiss = [...open]
-      .filter((d) => d.days > answers.maxDays!)
-      .sort((a, b) => a.days - b.days)[0];
-    if (nearMiss) {
-      return `Nothing open fits ${answers.maxDays} days at the fitness level you described. ${nearMiss.trekName} is the closest at ${nearMiss.days} days, and it is rated ${nearMiss.difficulty}.`;
-    }
+    clauses.push(`inside ${answers.maxDays} days`);
+  }
+
+  if (clauses.length > 0) {
+    const stated = `Nothing we have open is ${clauses.join(", ")}.`;
+    // Which single constraint is doing the excluding is the useful part: if
+    // relaxing one of them opens something up, say which one.
+    const openable = open
+      .map((d) => ({
+        d,
+        breaks: [
+          answers.altitudeCeilingM !== undefined &&
+          d.maxAltitudeM > answers.altitudeCeilingM
+            ? "altitude"
+            : null,
+          answers.maxDays !== undefined && d.days > answers.maxDays
+            ? "length"
+            : null,
+          answers.months !== undefined && !answers.months.includes(monthOf(d))
+            ? "dates"
+            : null,
+        ].filter(Boolean) as string[],
+      }))
+      .filter((row) => row.breaks.length === 1)
+      .sort((a, b) => a.d.days - b.d.days)[0];
+
+    return openable
+      ? `${stated} ${openable.d.trekName} clears everything except the ${openable.breaks[0]} — ${openable.d.days} days, ${openable.d.maxAltitudeM.toLocaleString("en-GB")} m, departing ${formatDate(openable.d.departsOn)}. If that one constraint has any give, tell us and we will look again.`
+      : `${stated} Every departure we have open breaks more than one of those, so there is no near miss worth showing you. Tell us which of the three has any give.`;
   }
 
   if (answers.fitness === "light") {

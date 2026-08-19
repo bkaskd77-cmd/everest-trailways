@@ -328,7 +328,14 @@ export function TrekMatcher({ chrome = true }: { chrome?: boolean }) {
 
       {/* The live region. Given a floor so a streamed answer cannot push the
           controls down the page as it arrives. */}
-      <div aria-live="polite" aria-atomic="false" className="min-h-24">
+      {/* The floor stops a streaming answer shunting the controls down the
+          page while it arrives. Once the answer has landed it is only dead
+          space above the results, so it goes. */}
+      <div
+        aria-live="polite"
+        aria-atomic="false"
+        className={cn(busy || question ? "min-h-24" : "")}
+      >
         {busy && !streamed && (
           <p className="text-sm text-muted-foreground">
             Reading the departures…
@@ -371,9 +378,13 @@ export function TrekMatcher({ chrome = true }: { chrome?: boolean }) {
 
       {/* Matches. Compact, but carrying the same guarantee and price the full
           card carries — a summary that quietly drops the caveats would undo the
-          point of the section above it. */}
+          point of the section above it.
+
+          Everything here satisfies every hard constraint the person stated.
+          Nothing above their altitude ceiling, longer than the days they have,
+          or outside their window can reach this list — see hardBreach. */}
       {result && result.matches.length > 0 && (
-        <ul className="mt-6 grid gap-3">
+        <ul className="mt-4 grid gap-3">
           {result.matches.map((match) => {
             const departure = byId.get(match.id);
             if (!departure) return null;
@@ -387,6 +398,32 @@ export function TrekMatcher({ chrome = true }: { chrome?: boolean }) {
             );
           })}
         </ul>
+      )}
+
+      {/* The near misses, and only ever as near misses. Someone who told us
+          they have never been above 3,000 m has half-expected to see the
+          4,984 m trek considered; showing it here says it was, and says why it
+          is not on the list. It carries no reason to book and no price
+          emphasis, because it is not an offer. */}
+      {result && result.beyond.length > 0 && (
+        <section className="mt-8 border-t border-border pt-5">
+          <h4 className="text-sm text-muted-foreground">
+            These do not meet what you told us, in case you want to reconsider:
+          </h4>
+          <ul className="mt-3 grid gap-2">
+            {result.beyond.map((entry) => {
+              const departure = byId.get(entry.id);
+              if (!departure) return null;
+              return (
+                <BeyondCard
+                  key={entry.id}
+                  departure={departure}
+                  exceeds={entry.exceeds}
+                />
+              );
+            })}
+          </ul>
+        </section>
       )}
 
       {/* The three tappable answers, plus free text — always both. */}
@@ -504,7 +541,9 @@ function MatchCard({
       </p>
 
       <p className="mt-3 text-sm">{reason}</p>
-      <p className="mt-1 text-sm text-muted-foreground">{caution}</p>
+      {/* The honest half of the pair, so it reads at the same weight as the
+          reason rather than as small print under it. */}
+      <p className="mt-1 text-sm text-foreground/80">{caution}</p>
 
       <Link
         href={`/departures/${departure.id}`}
@@ -516,6 +555,29 @@ function MatchCard({
           className="size-3 transition-transform duration-200 group-hover/link:translate-x-[3px]"
         />
       </Link>
+    </li>
+  );
+}
+
+function BeyondCard({
+  departure,
+  exceeds,
+}: {
+  departure: Departure;
+  exceeds: string;
+}) {
+  return (
+    <li className="rounded-md border border-border/60 px-4 py-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <p className="font-display text-lg tracking-tight">
+          {departure.trekName}
+        </p>
+        <p className="tabular text-sm text-muted-foreground">
+          {formatDateRange(departure.departsOn, departure.returnsOn)} ·{" "}
+          {departure.days} days
+        </p>
+      </div>
+      <p className="mt-1 text-sm text-foreground/80">{exceeds}</p>
     </li>
   );
 }

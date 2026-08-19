@@ -335,10 +335,15 @@
   --background: var(--color-juniper);
   --foreground: var(--color-glacier);
   --muted: color-mix(in oklab, var(--color-glacier) 8%, var(--color-juniper));
+  /* 80%, not 68%: at 68% the caution line under a result measured 4.92:1 —
+     over AA on paper, but visibly weaker than the sentence above it, which
+     is the wrong hierarchy for the half of the pair that carries the
+     drawback. Mixing toward juniper rather than summit, which is not this
+     surface's colour and was left behind when the panel was repainted. */
   --muted-foreground: color-mix(
     in oklab,
-    var(--color-glacier) 68%,
-    var(--color-summit)
+    var(--color-glacier) 80%,
+    var(--color-juniper)
   );
   --card: color-mix(in oklab, var(--color-glacier) 8%, var(--color-juniper));
   --card-foreground: var(--color-glacier);

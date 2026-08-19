@@ -24,13 +24,27 @@ export type Match = {
   caution: string;
 };
 
+/**
+ * A departure that would otherwise have suited someone but breaks something
+ * they told us — an altitude ceiling, the days they have, the window they can
+ * travel in.
+ *
+ * Kept as its own type rather than a flag on Match so it is impossible to
+ * render one where the other belongs. `exceeds` states the breach and its size
+ * in plain words; it is never a selling point and never a recommendation.
+ */
+export type Beyond = { id: string; exceeds: string };
+
 export type MatcherQuestion = { text: string; options: string[] };
 
 export type MatcherResult = {
   message: string;
   done: boolean;
   question: MatcherQuestion | null;
+  /** Everything here satisfies every hard constraint the person stated. */
   matches: Match[];
+  /** Everything here breaks one, and says which. Never presented as a match. */
+  beyond: Beyond[];
   /** Which path produced this — surfaced in the UI, not hidden. */
   source: "assistant" | "fallback";
 };
@@ -140,14 +154,25 @@ const str = (v: unknown, fallback = ""): string =>
  */
 export function coerceResult(
   parsed: Record<string, unknown>,
-  validIds: readonly string[],
-  maxMatches: number,
+  options: {
+    validIds: readonly string[];
+    maxMatches: number;
+    /**
+     * Returns the breach a departure commits against what the person stated,
+     * or null if it commits none. The model is told the rule; this is what
+     * makes the rule true. A departure it puts in `matches` that breaks a
+     * stated ceiling is moved to `beyond`, not dropped and not shown as a fit.
+     */
+    breach: (id: string) => string | null;
+  },
 ): MatcherResult | null {
+  const { validIds, maxMatches, breach } = options;
   const message = str(parsed.message);
   if (!message) return null;
 
   const rawMatches = Array.isArray(parsed.matches) ? parsed.matches : [];
   const matches: Match[] = [];
+  const beyond: Beyond[] = [];
   const seen = new Set<string>();
 
   for (const entry of rawMatches) {
@@ -156,6 +181,14 @@ export function coerceResult(
     const id = str(row.id);
     if (!validIds.includes(id) || seen.has(id)) continue;
     seen.add(id);
+
+    // The safety rule is enforced here, not asked for politely in the prompt.
+    const exceeds = breach(id);
+    if (exceeds) {
+      beyond.push({ id, exceeds });
+      continue;
+    }
+
     matches.push({
       id,
       reason: str(row.reason),
@@ -165,6 +198,20 @@ export function coerceResult(
       ),
     });
     if (matches.length >= maxMatches) break;
+  }
+
+  // Anything the model itself put beyond the line, checked the same way.
+  const rawBeyond = Array.isArray(parsed.beyond) ? parsed.beyond : [];
+  for (const entry of rawBeyond) {
+    if (!entry || typeof entry !== "object") continue;
+    const row = entry as Record<string, unknown>;
+    const id = str(row.id);
+    if (!validIds.includes(id) || seen.has(id)) continue;
+    const exceeds = breach(id);
+    // A departure that breaks nothing does not belong in this group either.
+    if (!exceeds) continue;
+    seen.add(id);
+    beyond.push({ id, exceeds: str(row.exceeds) || exceeds });
   }
 
   let question: MatcherQuestion | null = null;
@@ -190,6 +237,7 @@ export function coerceResult(
     done,
     question: done ? null : question,
     matches: done ? matches : [],
+    beyond: done ? beyond.slice(0, maxMatches) : [],
     source: "assistant",
   };
 }

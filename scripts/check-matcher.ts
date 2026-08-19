@@ -26,6 +26,7 @@ import {
   FALLBACK_QUESTIONS,
   TREK_INTENT,
   fallbackMatch,
+  hardBreach,
   parseFreeText,
   type FallbackAnswers,
   type Intent,
@@ -128,6 +129,83 @@ for (const maxDays of DAY_OPTIONS) {
                 fail(
                   "empty-caution",
                   `${match.id} was matched without a caution — every match must carry one`,
+                );
+              }
+            }
+
+            /*
+             * The rule this guard exists for.
+             *
+             * Altitude experience, days available and travel window are facts
+             * about someone's trip, not preferences. A departure that breaks
+             * one of them is not a worse match — it is not a match. This ran
+             * against a real bug: a user who said "never above 3,000 m" was
+             * shown a 4,984 m trek with a note admitting it was 1,984 m above
+             * anything they had done.
+             */
+            for (const match of result.matches) {
+              const departure = departures.find((d) => d.id === match.id);
+              if (!departure) continue;
+
+              if (
+                altitudeCeilingM !== undefined &&
+                departure.maxAltitudeM > altitudeCeilingM
+              ) {
+                fail(
+                  "altitude-ceiling",
+                  `${match.id} at ${departure.maxAltitudeM} m is a MATCH for someone who stated a ${altitudeCeilingM} m ceiling`,
+                );
+              }
+              if (maxDays !== undefined && departure.days > maxDays) {
+                fail(
+                  "day-count",
+                  `${match.id} runs ${departure.days} days but is a MATCH for someone with ${maxDays}`,
+                );
+              }
+              if (
+                months !== undefined &&
+                !months.includes(new Date(departure.departsOn).getUTCMonth())
+              ) {
+                fail(
+                  "date-window",
+                  `${match.id} departs ${departure.departsOn} but is a MATCH for months ${months.join("/")}`,
+                );
+              }
+              if (hardBreach(departure, answers) !== null) {
+                fail(
+                  "breach-in-matches",
+                  `${match.id} is a MATCH despite hardBreach reporting a breach`,
+                );
+              }
+            }
+
+            // The other half: everything in the beyond group must actually
+            // break something, or it is a match being demoted for no reason.
+            for (const entry of result.beyond) {
+              const departure = departures.find((d) => d.id === entry.id);
+              if (!departure) {
+                fail(
+                  "unknown-id",
+                  `beyond names "${entry.id}", which is not in the dataset`,
+                );
+                continue;
+              }
+              if (hardBreach(departure, answers) === null) {
+                fail(
+                  "beyond-without-breach",
+                  `${entry.id} is in the beyond group but breaks nothing`,
+                );
+              }
+              if (!entry.exceeds.trim()) {
+                fail(
+                  "beyond-unexplained",
+                  `${entry.id} is beyond the stated limits without saying which one`,
+                );
+              }
+              if (result.matches.some((m) => m.id === entry.id)) {
+                fail(
+                  "beyond-and-match",
+                  `${entry.id} appears as both a match and beyond the limits`,
                 );
               }
             }
@@ -252,6 +330,9 @@ const REQUIRED_CONSTRAINTS = [
   "If the user describes a condition that makes high altitude dangerous, do not steer them to a high-altitude departure to make a sale — recommend lower-altitude options and say why.",
   "Never take payment details, passport numbers or personal data.",
   "Never promise availability.",
+  "Never place a departure in MATCHES if it exceeds a stated altitude ceiling, day count or date window. No exceptions, regardless of how few matches remain.",
+  "Never encourage a user toward a departure above their stated altitude experience.",
+  "An empty MATCHES list is a correct and acceptable answer.",
 ];
 
 for (const constraint of REQUIRED_CONSTRAINTS) {
@@ -322,6 +403,9 @@ console.log(
 );
 console.log(
   `  ok    ${emptyResults} combinations honestly returned no match rather than forcing one`,
+);
+console.log(
+  "  ok    no MATCH anywhere exceeds a stated altitude ceiling, day count or window",
 );
 console.log(
   `  ok    ${REQUIRED_CONSTRAINTS.length} hard constraints present verbatim`,

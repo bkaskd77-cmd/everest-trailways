@@ -4,6 +4,7 @@ import { cannedAskSource } from "@/content/ask-source";
 import { departures } from "@/content/departures";
 import {
   fallbackMatch,
+  hardBreach,
   type FallbackAnswers,
   type Intent,
 } from "@/lib/matcher-fallback";
@@ -159,6 +160,7 @@ function fallbackFor(
       done: true,
       question: null,
       matches: [],
+      beyond: [],
       source: "fallback",
     };
   }
@@ -272,8 +274,18 @@ export async function POST(request: Request): Promise<Response> {
         }
 
         const parsed = parseMatcherJson(raw);
+        // The altitude ceiling, the days and the window are enforced here
+        // rather than trusted to the model: whatever it puts in `matches`, a
+        // departure that breaks one of them is moved to `beyond`.
         const result = parsed
-          ? coerceResult(parsed, VALID_IDS, MAX_MATCHES)
+          ? coerceResult(parsed, {
+              validIds: VALID_IDS,
+              maxMatches: MAX_MATCHES,
+              breach: (id) => {
+                const departure = departures.find((d) => d.id === id);
+                return departure ? hardBreach(departure, answers) : null;
+              },
+            })
           : null;
 
         send({
