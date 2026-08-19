@@ -154,13 +154,18 @@ async function measure(page: Page, url: string): Promise<Metrics> {
     }
   });
 
-  // Open the matcher — the largest layout change on the page.
+  // Answer the matcher's first question. It swaps a question for a set of
+  // match cards inside a panel that is already on screen, which is the largest
+  // layout change the page can make after load — exactly the shift worth
+  // catching.
   await page.evaluate(async () => {
-    const button = [...document.querySelectorAll("button")].find((b) =>
-      /Find what fits/.test(b.textContent ?? ""),
+    const option = [...document.querySelectorAll("button")].find((b) =>
+      /Eight to twelve days/.test(b.textContent ?? ""),
     );
-    button?.click();
-    await new Promise((r) => setTimeout(r, 1400));
+    if (!option)
+      throw new Error("the matcher's first question is not on screen");
+    option.click();
+    await new Promise((r) => setTimeout(r, 2500));
   });
 
   const after = await page.evaluate(() => {

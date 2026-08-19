@@ -22,6 +22,10 @@
   --color-prayer: #c8511b;
   --color-pine: #2f5d4f;
   --color-sky: #7fa9c4;
+  /* Himalayan juniper — the dark the matcher panel is built on. Summit read
+     as flat black against a warm off-white page; this keeps the depth and
+     puts some of the hillside back into it. */
+  --color-juniper: #1b3d40;
   --color-snow: #ffffff;
 
   /* Derived steps. Each exists so the same hue can hold AA contrast on the
@@ -312,43 +316,50 @@
 --------------------------------------------------------------------------- */
 
 /**
- * Invert everything inside onto summit, in both themes.
+ * Invert everything inside onto the instrument surface, in both themes.
  *
- * The matcher cell is a dark instrument sitting in a grid of light cards, and
- * it stays dark when the whole site is dark. Re-pointing the semantic tokens
- * here means every child — buttons, inputs, hairlines, the seat meter, the
- * shadcn primitives — inherits the right palette without needing an inverted
- * variant written for it. `--color-prayer-deep` is redefined rather than
- * excepted, so `text-prayer-deep` resolves to something readable on summit
- * without every call site needing to know where it is.
+ * The matcher is a dark instrument sitting in a grid of light cards, and it
+ * stays dark when the whole site is dark. Re-pointing the semantic tokens here
+ * means every child — buttons, inputs, hairlines, the seat meter, the shadcn
+ * primitives — inherits the right palette without needing an inverted variant
+ * written for it. `--color-prayer-deep` is redefined rather than excepted, so
+ * `text-prayer-deep` resolves to something readable here without every call
+ * site needing to know where it is.
+ *
+ * Named for what it is rather than for the colour it currently uses, so
+ * repainting the panel does not mean renaming every class that sits on it.
  */
-@utility on-summit {
+@utility on-instrument {
   color-scheme: dark;
 
-  --background: var(--color-summit);
+  --background: var(--color-juniper);
   --foreground: var(--color-glacier);
-  --muted: var(--color-summit-raised);
+  --muted: color-mix(in oklab, var(--color-glacier) 8%, var(--color-juniper));
   --muted-foreground: color-mix(
     in oklab,
     var(--color-glacier) 68%,
     var(--color-summit)
   );
-  --card: var(--color-summit-raised);
+  --card: color-mix(in oklab, var(--color-glacier) 8%, var(--color-juniper));
   --card-foreground: var(--color-glacier);
-  --popover: var(--color-summit-raised);
+  --popover: color-mix(in oklab, var(--color-glacier) 8%, var(--color-juniper));
   --popover-foreground: var(--color-glacier);
-  --secondary: var(--color-summit-raised);
+  --secondary: color-mix(
+    in oklab,
+    var(--color-glacier) 8%,
+    var(--color-juniper)
+  );
   --secondary-foreground: var(--color-glacier);
-  --accent: #1a3b4c;
+  --accent: color-mix(in oklab, var(--color-glacier) 14%, var(--color-juniper));
   --accent-foreground: var(--color-glacier);
-  --border: color-mix(in oklab, var(--color-glacier) 20%, var(--color-summit));
-  --input: color-mix(in oklab, var(--color-glacier) 26%, var(--color-summit));
+  --border: color-mix(in oklab, var(--color-glacier) 20%, var(--color-juniper));
+  --input: color-mix(in oklab, var(--color-glacier) 26%, var(--color-juniper));
   --verified: var(--color-pine-light);
   --info: var(--color-sky);
 
   --color-prayer-deep: var(--color-prayer-light);
 
-  --meter-track: #2b4a5c;
+  --meter-track: #2c4f52;
   --meter-guaranteed: #6fa893;
   --meter-filling: #e87a45;
   --meter-pending: #a8a296;

@@ -320,9 +320,17 @@ function contrast(a: string, b: string): number {
 const brand = tokens(cssBlock("@theme {"));
 const light = tokens(cssBlock(":root {"));
 const dark = tokens(cssBlock(".dark {"));
+// The matcher panel re-points the same tokens onto its own dark surface, so it
+// is a third theme in every sense that matters here and gets checked like one.
+const instrument = tokens(cssBlock("@utility on-instrument {"));
 
 /** Non-text UI components. WCAG 2.2 SC 1.4.11. */
 const MIN_UI_CONTRAST = 3;
+
+/** The panel shares the dark palette, so it shares the dark sources. */
+type MeterTheme = "light" | "dark" | "panel";
+const sourceTheme = (theme: MeterTheme): "light" | "dark" =>
+  theme === "panel" ? "dark" : theme;
 
 const METER_SOURCE: Record<string, { light: string; dark: string }> = {
   "--meter-guaranteed": { light: "--color-pine", dark: "--color-pine-light" },
@@ -345,6 +353,7 @@ const meterRatios: string[] = [];
 for (const [theme, set] of [
   ["light", light],
   ["dark", dark],
+  ["panel", instrument],
 ] as const) {
   const track = set["--meter-track"];
   if (!track) {
@@ -357,12 +366,12 @@ for (const [theme, set] of [
       fail("meter", "missing-token", `${bar} is not defined in ${theme}`);
       continue;
     }
-    const expected = brand[source[theme]];
+    const expected = brand[source[sourceTheme(theme)]];
     if (expected && value !== expected) {
       fail(
         "meter",
         "palette-drift",
-        `${theme} ${bar} is ${value} but ${source[theme]} is ${expected}`,
+        `${theme} ${bar} is ${value} but ${source[sourceTheme(theme)]} is ${expected}`,
       );
     }
     const ratio = contrast(value, track);
