@@ -26,6 +26,7 @@ import {
   FALLBACK_QUESTIONS,
   TREK_INTENT,
   fallbackMatch,
+  altitudeGap,
   hardBreach,
   parseFreeText,
   type FallbackAnswers,
@@ -54,11 +55,20 @@ const MONTH_OPTIONS: (number[] | undefined)[] = [
   [1, 2, 3],
   [6],
 ];
-const ALTITUDE_OPTIONS = [undefined, 0, 3000, 4000, 5500];
+/** What they have done. Must never remove anything from MATCHES. */
+const EXPERIENCE_OPTIONS = [undefined, 0, 3000, 4500, 5500];
+/** What they will do. The only one of the two that is a ceiling. */
+const WILLINGNESS_OPTIONS = [undefined, 3000, 4500];
+/** "Not sure, advise me" — no ceiling, but every stretch must be flagged. */
+const ADVICE_OPTIONS = [false, true];
+/**
+ * Fitness lost its rung on the ladder when altitude took two, but it is still a
+ * live answer — free text sets it, and the assistant may still ask for it — so
+ * it stays in the grid.
+ */
 const FITNESS_OPTIONS: (FallbackAnswers["fitness"] | undefined)[] = [
   undefined,
   "light",
-  "full",
   "trained",
 ];
 const INTENT_OPTIONS: (Intent | undefined)[] = [
@@ -82,157 +92,202 @@ const emittedIds = new Set<string>();
 
 for (const maxDays of DAY_OPTIONS) {
   for (const months of MONTH_OPTIONS) {
-    for (const altitudeCeilingM of ALTITUDE_OPTIONS) {
-      for (const fitness of FITNESS_OPTIONS) {
-        for (const intent of INTENT_OPTIONS) {
-          for (const flags of FLAG_OPTIONS) {
-            combinations += 1;
-            const answers: FallbackAnswers = {
-              maxDays,
-              months,
-              altitudeCeilingM,
-              fitness,
-              intent,
-              ...flags,
-            };
-            const result = fallbackMatch(answers);
+    for (const experienceM of EXPERIENCE_OPTIONS) {
+      for (const willingnessM of WILLINGNESS_OPTIONS) {
+        for (const altitudeAdvice of ADVICE_OPTIONS) {
+          for (const fitness of FITNESS_OPTIONS) {
+            for (const intent of INTENT_OPTIONS) {
+              for (const flags of FLAG_OPTIONS) {
+                combinations += 1;
+                const answers: FallbackAnswers = {
+                  maxDays,
+                  months,
+                  experienceM,
+                  willingnessM,
+                  altitudeAdvice,
+                  fitness,
+                  intent,
+                  ...flags,
+                };
+                const result = fallbackMatch(answers);
 
-            if (!result.message.trim()) {
-              fail(
-                "empty-message",
-                `fallbackMatch returned no message for ${JSON.stringify(answers)}`,
-              );
-            }
-            if (result.matches.length > MAX_MATCHES) {
-              fail(
-                "too-many-matches",
-                `${result.matches.length} matches for ${JSON.stringify(answers)} — the cap is ${MAX_MATCHES}`,
-              );
-            }
-            if (result.matches.length === 0) emptyResults += 1;
-
-            for (const match of result.matches) {
-              emittedIds.add(match.id);
-              if (!VALID_IDS.has(match.id)) {
-                fail(
-                  "unknown-id",
-                  `fallbackMatch emitted "${match.id}", which is not in the dataset`,
-                );
-              }
-              if (!match.reason.trim()) {
-                fail(
-                  "empty-reason",
-                  `${match.id} was matched without a reason`,
-                );
-              }
-              if (!match.caution.trim()) {
-                fail(
-                  "empty-caution",
-                  `${match.id} was matched without a caution — every match must carry one`,
-                );
-              }
-            }
-
-            /*
-             * The rule this guard exists for.
-             *
-             * Altitude experience, days available and travel window are facts
-             * about someone's trip, not preferences. A departure that breaks
-             * one of them is not a worse match — it is not a match. This ran
-             * against a real bug: a user who said "never above 3,000 m" was
-             * shown a 4,984 m trek with a note admitting it was 1,984 m above
-             * anything they had done.
-             */
-            for (const match of result.matches) {
-              const departure = departures.find((d) => d.id === match.id);
-              if (!departure) continue;
-
-              if (
-                altitudeCeilingM !== undefined &&
-                departure.maxAltitudeM > altitudeCeilingM
-              ) {
-                fail(
-                  "altitude-ceiling",
-                  `${match.id} at ${departure.maxAltitudeM} m is a MATCH for someone who stated a ${altitudeCeilingM} m ceiling`,
-                );
-              }
-              if (maxDays !== undefined && departure.days > maxDays) {
-                fail(
-                  "day-count",
-                  `${match.id} runs ${departure.days} days but is a MATCH for someone with ${maxDays}`,
-                );
-              }
-              if (
-                months !== undefined &&
-                !months.includes(new Date(departure.departsOn).getUTCMonth())
-              ) {
-                fail(
-                  "date-window",
-                  `${match.id} departs ${departure.departsOn} but is a MATCH for months ${months.join("/")}`,
-                );
-              }
-              if (hardBreach(departure, answers) !== null) {
-                fail(
-                  "breach-in-matches",
-                  `${match.id} is a MATCH despite hardBreach reporting a breach`,
-                );
-              }
-            }
-
-            // The other half: everything in the beyond group must actually
-            // break something, or it is a match being demoted for no reason.
-            for (const entry of result.beyond) {
-              const departure = departures.find((d) => d.id === entry.id);
-              if (!departure) {
-                fail(
-                  "unknown-id",
-                  `beyond names "${entry.id}", which is not in the dataset`,
-                );
-                continue;
-              }
-              if (hardBreach(departure, answers) === null) {
-                fail(
-                  "beyond-without-breach",
-                  `${entry.id} is in the beyond group but breaks nothing`,
-                );
-              }
-              if (!entry.exceeds.trim()) {
-                fail(
-                  "beyond-unexplained",
-                  `${entry.id} is beyond the stated limits without saying which one`,
-                );
-              }
-              if (result.matches.some((m) => m.id === entry.id)) {
-                fail(
-                  "beyond-and-match",
-                  `${entry.id} appears as both a match and beyond the limits`,
-                );
-              }
-            }
-
-            // The refusal that matters most: a flagged condition must never be
-            // answered with a high-altitude departure.
-            if (flags.medicalConcern) {
-              for (const match of result.matches) {
-                const departure = departures.find((d) => d.id === match.id);
-                if (departure && departure.maxAltitudeM > 3000) {
+                if (!result.message.trim()) {
                   fail(
-                    "altitude-refusal",
-                    `a declared medical concern was matched to ${match.id} at ${departure.maxAltitudeM} m`,
+                    "empty-message",
+                    `fallbackMatch returned no message for ${JSON.stringify(answers)}`,
+                  );
+                }
+                if (result.matches.length > MAX_MATCHES) {
+                  fail(
+                    "too-many-matches",
+                    `${result.matches.length} matches for ${JSON.stringify(answers)} — the cap is ${MAX_MATCHES}`,
+                  );
+                }
+                if (result.matches.length === 0) emptyResults += 1;
+
+                for (const match of result.matches) {
+                  emittedIds.add(match.id);
+                  if (!VALID_IDS.has(match.id)) {
+                    fail(
+                      "unknown-id",
+                      `fallbackMatch emitted "${match.id}", which is not in the dataset`,
+                    );
+                  }
+                  if (!match.reason.trim()) {
+                    fail(
+                      "empty-reason",
+                      `${match.id} was matched without a reason`,
+                    );
+                  }
+                  if (!match.caution.trim()) {
+                    fail(
+                      "empty-caution",
+                      `${match.id} was matched without a caution — every match must carry one`,
+                    );
+                  }
+                }
+
+                /*
+                 * The rule this guard exists for.
+                 *
+                 * Altitude experience, days available and travel window are facts
+                 * about someone's trip, not preferences. A departure that breaks
+                 * one of them is not a worse match — it is not a match. This ran
+                 * against a real bug: a user who said "never above 3,000 m" was
+                 * shown a 4,984 m trek with a note admitting it was 1,984 m above
+                 * anything they had done.
+                 */
+                for (const match of result.matches) {
+                  const departure = departures.find((d) => d.id === match.id);
+                  if (!departure) continue;
+
+                  // Willingness is the ceiling. Experience is not, and the pair
+                  // below proves it: this check only ever reads willingness.
+                  if (
+                    willingnessM !== undefined &&
+                    departure.maxAltitudeM > willingnessM
+                  ) {
+                    fail(
+                      "willingness-ceiling",
+                      `${match.id} at ${departure.maxAltitudeM} m is a MATCH for someone willing to go to ${willingnessM} m`,
+                    );
+                  }
+
+                  // Every stretch beyond what they have done has to say so.
+                  if (altitudeGap(departure, answers) !== null) {
+                    if (!/above your previous high/.test(match.caution)) {
+                      fail(
+                        "uncautioned-stretch",
+                        `${match.id} at ${departure.maxAltitudeM} m is above a stated ${experienceM} m previous high but its caution does not say so`,
+                      );
+                    }
+                  }
+                  if (maxDays !== undefined && departure.days > maxDays) {
+                    fail(
+                      "day-count",
+                      `${match.id} runs ${departure.days} days but is a MATCH for someone with ${maxDays}`,
+                    );
+                  }
+                  if (
+                    months !== undefined &&
+                    !months.includes(
+                      new Date(departure.departsOn).getUTCMonth(),
+                    )
+                  ) {
+                    fail(
+                      "date-window",
+                      `${match.id} departs ${departure.departsOn} but is a MATCH for months ${months.join("/")}`,
+                    );
+                  }
+                  if (hardBreach(departure, answers) !== null) {
+                    fail(
+                      "breach-in-matches",
+                      `${match.id} is a MATCH despite hardBreach reporting a breach`,
+                    );
+                  }
+                }
+
+                /*
+                 * Experience never filters.
+                 *
+                 * Asserted by running the same answers with experience removed and
+                 * requiring an identical set of matches. This is the property the
+                 * step is really about — it is not enough that the code happens not
+                 * to read experienceM today, it must stay unable to.
+                 */
+                if (experienceM !== undefined) {
+                  const withoutExperience = fallbackMatch({
+                    ...answers,
+                    experienceM: undefined,
+                  });
+                  const a = result.matches.map((m) => m.id).join(",");
+                  const b = withoutExperience.matches
+                    .map((m) => m.id)
+                    .join(",");
+                  if (a !== b) {
+                    fail(
+                      "experience-filtered",
+                      `stating a ${experienceM} m previous high changed the matches from [${b}] to [${a}]`,
+                    );
+                  }
+                }
+
+                // The other half: everything in the beyond group must actually
+                // break something, or it is a match being demoted for no reason.
+                for (const entry of result.beyond) {
+                  const departure = departures.find((d) => d.id === entry.id);
+                  if (!departure) {
+                    fail(
+                      "unknown-id",
+                      `beyond names "${entry.id}", which is not in the dataset`,
+                    );
+                    continue;
+                  }
+                  if (hardBreach(departure, answers) === null) {
+                    fail(
+                      "beyond-without-breach",
+                      `${entry.id} is in the beyond group but breaks nothing`,
+                    );
+                  }
+                  if (!entry.exceeds.trim()) {
+                    fail(
+                      "beyond-unexplained",
+                      `${entry.id} is beyond the stated limits without saying which one`,
+                    );
+                  }
+                  if (result.matches.some((m) => m.id === entry.id)) {
+                    fail(
+                      "beyond-and-match",
+                      `${entry.id} appears as both a match and beyond the limits`,
+                    );
+                  }
+                }
+
+                // The refusal that matters most: a flagged condition must never be
+                // answered with a high-altitude departure.
+                if (flags.medicalConcern) {
+                  for (const match of result.matches) {
+                    const departure = departures.find((d) => d.id === match.id);
+                    if (departure && departure.maxAltitudeM > 3000) {
+                      fail(
+                        "altitude-refusal",
+                        `a declared medical concern was matched to ${match.id} at ${departure.maxAltitudeM} m`,
+                      );
+                    }
+                  }
+                }
+
+                // Never a booking.
+                if (
+                  flags.wantsToBook &&
+                  !/cannot take a booking/i.test(result.message)
+                ) {
+                  fail(
+                    "booking-refusal",
+                    `a request to book was not declined for ${JSON.stringify(answers)}`,
                   );
                 }
               }
-            }
-
-            // Never a booking.
-            if (
-              flags.wantsToBook &&
-              !/cannot take a booking/i.test(result.message)
-            ) {
-              fail(
-                "booking-refusal",
-                `a request to book was not declined for ${JSON.stringify(answers)}`,
-              );
             }
           }
         }
@@ -266,10 +321,12 @@ if (FALLBACK_QUESTIONS.length > 5) {
   );
 }
 for (const question of FALLBACK_QUESTIONS) {
-  if (question.options.length !== 3) {
+  // Three, or four where a fourth is genuinely a different answer rather than a
+  // shade of one of the others — "not sure, advise me" is the only such case.
+  if (question.options.length < 3 || question.options.length > 4) {
     fail(
       "bad-options",
-      `"${question.text}" offers ${question.options.length} options — the section promises three`,
+      `"${question.text}" offers ${question.options.length} options — three, or four at most`,
     );
   }
 }
@@ -333,6 +390,8 @@ const REQUIRED_CONSTRAINTS = [
   "Never place a departure in MATCHES if it exceeds a stated altitude ceiling, day count or date window. No exceptions, regardless of how few matches remain.",
   "Never encourage a user toward a departure above their stated altitude experience.",
   "An empty MATCHES list is a correct and acceptable answer.",
+  "Altitude experience never excludes a departure. Only a stated willingness to go no higher than a given altitude is a ceiling.",
+  "Every match above the user's stated experience must carry a caution naming the height and the difference. State it once, as a fact, and do not lecture.",
 ];
 
 for (const constraint of REQUIRED_CONSTRAINTS) {
@@ -405,7 +464,13 @@ console.log(
   `  ok    ${emptyResults} combinations honestly returned no match rather than forcing one`,
 );
 console.log(
-  "  ok    no MATCH anywhere exceeds a stated altitude ceiling, day count or window",
+  "  ok    no MATCH anywhere exceeds a stated willingness, day count or window",
+);
+console.log(
+  "  ok    stating a previous high never changed which departures matched",
+);
+console.log(
+  "  ok    every match above a stated previous high carries a caution naming it",
 );
 console.log(
   `  ok    ${REQUIRED_CONSTRAINTS.length} hard constraints present verbatim`,

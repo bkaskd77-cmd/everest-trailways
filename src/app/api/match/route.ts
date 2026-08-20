@@ -95,13 +95,22 @@ function sanitiseAnswers(value: unknown): FallbackAnswers {
       .map((m) => Math.floor(m));
     if (months.length) out.months = months;
   }
+  // Two separate numbers now, and only one of them can exclude anything.
   if (
-    typeof row.altitudeCeilingM === "number" &&
-    row.altitudeCeilingM >= 0 &&
-    row.altitudeCeilingM <= 9000
+    typeof row.experienceM === "number" &&
+    row.experienceM >= 0 &&
+    row.experienceM <= 9000
   ) {
-    out.altitudeCeilingM = Math.floor(row.altitudeCeilingM);
+    out.experienceM = Math.floor(row.experienceM);
   }
+  if (
+    typeof row.willingnessM === "number" &&
+    row.willingnessM >= 0 &&
+    row.willingnessM <= 9000
+  ) {
+    out.willingnessM = Math.floor(row.willingnessM);
+  }
+  if (row.altitudeAdvice === true) out.altitudeAdvice = true;
   if (
     row.fitness === "light" ||
     row.fitness === "full" ||

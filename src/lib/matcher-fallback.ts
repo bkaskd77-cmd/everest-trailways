@@ -79,8 +79,26 @@ export type FallbackAnswers = {
   maxDays?: number;
   /** Zero-indexed months they can travel. */
   months?: number[];
-  /** The highest they say they have been. */
-  altitudeCeilingM?: number;
+  /**
+   * The highest they have actually trekked.
+   *
+   * This NEVER excludes a departure. Someone who has been to 3,000 m and wants
+   * to go to 5,364 m is not making a mistake — acclimatisation days are what
+   * the itinerary is for, and telling them they may not is not our call. All
+   * this does is put the difference on the card so they can see it.
+   */
+  experienceM?: number;
+  /**
+   * How high they have said they are willing to go this time.
+   *
+   * This IS the ceiling, and it is hard. It is a decision they have made about
+   * their own trip, and nothing above it belongs in a list of things that fit.
+   * Undefined means no ceiling — either they said "as high as it takes" or they
+   * were never asked.
+   */
+  willingnessM?: number;
+  /** They asked us to advise rather than name a ceiling. No filter, more care. */
+  altitudeAdvice?: boolean;
   fitness?: "light" | "full" | "trained";
   intent?: Intent;
   /** A trek they asked for by name. Matters most when we have to say no to it. */
@@ -121,6 +139,14 @@ const BOOKING_TERMS =
   /\b(book it|book me|just book|pay|payment|card details|credit card|deposit|charge me|checkout|reserve it)\b/i;
 
 const CHEAPEST_TERMS = /\b(cheap(est)?|lowest price|least expensive|budget)\b/i;
+
+/** Phrases that turn a number into a limit rather than a fact about the past. */
+const WILLINGNESS_TERMS =
+  /\b(willing|prepared|want to go|happy to go|no higher|nothing above|not go above|max(imum)?|cap|ceiling|limit|stay (?:below|under))\b/i;
+
+/** They would rather we advised than named a number. */
+const ADVICE_TERMS =
+  /\b(not sure|unsure|no idea|advise me|you tell me|what do you (?:recommend|think)|whatever you)\b/i;
 
 /**
  * Treks people name directly. Ordered so the more specific pattern wins —
@@ -180,11 +206,20 @@ export function parseFreeText(text: string): FallbackAnswers {
   );
   if (altitude) {
     const value = Number(altitude[1]);
-    if (value >= 100 && value <= 9000) answers.altitudeCeilingM = value;
+    if (value >= 100 && value <= 9000) {
+      // Which of the two a number means depends entirely on how it was framed.
+      // "I do not want to go above 4,000 m" is a ceiling; "I have been to
+      // 4,000 m" is not, and reading the second as the first would quietly
+      // withhold the very trip they were asking about. Unframed, it is
+      // experience — the reading that cannot exclude anything.
+      if (WILLINGNESS_TERMS.test(t)) answers.willingnessM = value;
+      else answers.experienceM = value;
+    }
   }
   if (/\bnever been (?:to )?(?:any )?(?:altitude|high)/.test(t)) {
-    answers.altitudeCeilingM = answers.altitudeCeilingM ?? 0;
+    answers.experienceM = answers.experienceM ?? 0;
   }
+  if (ADVICE_TERMS.test(t)) answers.altitudeAdvice = true;
 
   if (MEDICAL_TERMS.test(t)) answers.medicalConcern = true;
   if (BOOKING_TERMS.test(t)) answers.wantsToBook = true;
@@ -236,21 +271,29 @@ export const FALLBACK_QUESTIONS: FallbackQuestion[] = [
     ],
   },
   {
-    id: "altitudeCeilingM",
-    text: "What is the highest you have been?",
+    id: "experienceM",
+    text: "What is the highest you have trekked?",
     options: [
-      { label: "Never above 3,000 m", patch: { altitudeCeilingM: 3000 } },
-      { label: "Somewhere around 4,000 m", patch: { altitudeCeilingM: 4000 } },
-      { label: "Above 5,000 m", patch: { altitudeCeilingM: 5500 } },
+      { label: "Under 3,000 m", patch: { experienceM: 3000 } },
+      { label: "3,000–4,500 m", patch: { experienceM: 4500 } },
+      { label: "Above 4,500 m", patch: { experienceM: 5500 } },
     ],
   },
   {
-    id: "fitness",
-    text: "What does a hard day of walking look like for you?",
+    id: "willingnessM",
+    // The one that decides what appears. Asked separately from experience
+    // because they are different questions with different consequences: what
+    // you have done shapes the caution, what you are willing to do sets the
+    // ceiling.
+    text: "How high are you willing to go this time?",
     options: [
-      { label: "A few hours is plenty", patch: { fitness: "light" } },
-      { label: "Full days, back to back", patch: { fitness: "full" } },
-      { label: "I train for this", patch: { fitness: "trained" } },
+      { label: "Under 3,000 m", patch: { willingnessM: 3000 } },
+      { label: "Up to 4,500 m", patch: { willingnessM: 4500 } },
+      { label: "As high as it takes", patch: { willingnessM: undefined } },
+      {
+        label: "Not sure, advise me",
+        patch: { willingnessM: undefined, altitudeAdvice: true },
+      },
     ],
   },
   {
@@ -269,6 +312,16 @@ export const FALLBACK_QUESTIONS: FallbackQuestion[] = [
 const MEDICAL_DISCLAIMER =
   "This is general information, not medical advice — whether altitude is safe for you is a question for your doctor, and we would also want a licensed guide's assessment before you committed.";
 
+/**
+ * Said when someone answers "not sure, advise me" to the willingness question.
+ *
+ * They have not given us a ceiling, so we have not applied one — and that is a
+ * fact about the list they are looking at, not a footnote. It belongs above the
+ * results, once, in plain words.
+ */
+const NO_ALTITUDE_FILTER_LINE =
+  "You asked us to advise rather than name a ceiling, so we have not filtered on altitude at all. Every height below is stated, with the difference from your own highest where there is one.";
+
 const NO_BOOKING_LINE = "We cannot take a booking or any payment details here.";
 
 function monthOf(d: Departure): number {
@@ -281,12 +334,30 @@ function bookable(d: Departure, now: Date): boolean {
 }
 
 /** One honest sentence that counts against the departure. Never empty. */
+/**
+ * How far above their stated previous high this departure goes, rounded to the
+ * nearest hundred metres, or null when there is nothing to say.
+ *
+ * The band answers are stored at the top of the band, so "under 3,000 m" reads
+ * as 3,000. That understates the gap for someone whose real high is much lower,
+ * which is the direction to err in: it never overstates how far out of their
+ * depth we think they are.
+ */
+export function altitudeGap(d: Departure, a: FallbackAnswers): number | null {
+  if (typeof a.experienceM !== "number") return null;
+  const over = d.maxAltitudeM - a.experienceM;
+  return over > 0 ? Math.round(over / 100) * 100 : null;
+}
+
 function cautionFor(d: Departure, a: FallbackAnswers, now: Date): string {
   const status = departureStatus(d, now);
-  const ceiling = a.altitudeCeilingM;
 
-  if (typeof ceiling === "number" && d.maxAltitudeM > ceiling + 800) {
-    return `Its high point of ${d.maxAltitudeM.toLocaleString("en-GB")} m is ${(d.maxAltitudeM - ceiling).toLocaleString("en-GB")} m above anything you have done — the itinerary is built around acclimatisation days rather than speed, but that is the thing to weigh.`;
+  // Experience cautions, it never filters. State the number and the fact once
+  // and stop — a paragraph about what someone should conclude about their own
+  // body is a lecture, and this is a trekking company, not their doctor.
+  const gap = altitudeGap(d, a);
+  if (gap !== null) {
+    return `${d.maxAltitudeM.toLocaleString("en-GB")} m — about ${gap.toLocaleString("en-GB")} m above your previous high; the itinerary is built around acclimatisation days rather than speed.`;
   }
   if (status === "needs-n") {
     return `It is not guaranteed yet: ${d.seatsBooked} of ${d.minimumToRun} needed, ${seatsToGuarantee(d)} more by ${formatDate(d.decisionDate)}, and you are refunded in full if it does not reach that.`;
@@ -324,14 +395,7 @@ function reasonFor(d: Departure, a: FallbackAnswers, now: Date): string {
  * Lower is nearer. Counts how many of the three it breaks, then by how much.
  */
 function breachSeverity(d: Departure, answers: FallbackAnswers): number {
-  const stated = answers.altitudeCeilingM;
-  const medical = answers.medicalConcern
-    ? MEDICAL_ALTITUDE_CEILING_M
-    : undefined;
-  const ceiling =
-    stated !== undefined && medical !== undefined
-      ? Math.min(stated, medical)
-      : (stated ?? medical);
+  const ceiling = altitudeCeiling(answers);
 
   let broken = 0;
   let magnitude = 0;
@@ -375,21 +439,30 @@ function breachSeverity(d: Departure, answers: FallbackAnswers): number {
  *
  * Returns null when the departure breaks nothing.
  */
+/**
+ * The only altitude number that filters anything.
+ *
+ * Willingness, and the medical ceiling when one applies — whichever is lower.
+ * Experience is deliberately absent: it has no vote here.
+ */
+export function altitudeCeiling(a: FallbackAnswers): number | undefined {
+  const medical = a.medicalConcern ? MEDICAL_ALTITUDE_CEILING_M : undefined;
+  if (a.willingnessM !== undefined && medical !== undefined) {
+    return Math.min(a.willingnessM, medical);
+  }
+  return a.willingnessM ?? medical;
+}
+
 export function hardBreach(
   d: Departure,
   answers: FallbackAnswers,
 ): string | null {
-  const stated = answers.altitudeCeilingM;
-  const medical = answers.medicalConcern
-    ? MEDICAL_ALTITUDE_CEILING_M
-    : undefined;
-  const ceiling =
-    stated !== undefined && medical !== undefined
-      ? Math.min(stated, medical)
-      : (stated ?? medical);
+  const ceiling = altitudeCeiling(answers);
 
   if (ceiling !== undefined && d.maxAltitudeM > ceiling) {
-    return `${d.maxAltitudeM.toLocaleString("en-GB")} m — ${(d.maxAltitudeM - ceiling).toLocaleString("en-GB")} m above the ceiling you gave us.`;
+    return answers.medicalConcern && ceiling === MEDICAL_ALTITUDE_CEILING_M
+      ? `${d.maxAltitudeM.toLocaleString("en-GB")} m — above the ${MEDICAL_ALTITUDE_CEILING_M.toLocaleString("en-GB")} m we hold to when someone has told us about a condition.`
+      : `${d.maxAltitudeM.toLocaleString("en-GB")} m — ${(d.maxAltitudeM - ceiling).toLocaleString("en-GB")} m above the height you said you were willing to go.`;
   }
   if (answers.maxDays !== undefined && d.days > answers.maxDays) {
     return `${d.days} days — ${d.days - answers.maxDays} more than the ${answers.maxDays} you have.`;
@@ -413,6 +486,9 @@ export function fallbackMatch(
   const prefix: string[] = [];
   if (answers.wantsToBook) prefix.push(NO_BOOKING_LINE);
   if (answers.medicalConcern) prefix.push(MEDICAL_DISCLAIMER);
+  if (answers.altitudeAdvice && !answers.medicalConcern) {
+    prefix.push(NO_ALTITUDE_FILTER_LINE);
+  }
 
   const open = departures.filter((d) => bookable(d, now));
 
@@ -504,11 +580,6 @@ function softScore(d: Departure, answers: FallbackAnswers, now: Date): number {
   const intents = TREK_INTENT[d.trekId] ?? [];
   if (answers.intent && intents.includes(answers.intent)) score += 3;
 
-  if (typeof answers.altitudeCeilingM === "number") {
-    const headroom = answers.altitudeCeilingM - d.maxAltitudeM;
-    if (headroom >= 0) score += 2;
-  }
-
   if (answers.fitness === "trained" && d.difficulty !== "moderate") score += 1;
   if (answers.fitness === "light" && d.difficulty === "moderate") score += 1;
 
@@ -574,8 +645,9 @@ function explainNothingFits(
   // Name the constraints back, in their own words, rather than saying "no
   // results". The person needs to know which of the three to loosen.
   const clauses: string[] = [];
-  if (answers.altitudeCeilingM !== undefined) {
-    clauses.push(`under ${answers.altitudeCeilingM.toLocaleString("en-GB")} m`);
+  const ceiling = altitudeCeiling(answers);
+  if (ceiling !== undefined) {
+    clauses.push(`under ${ceiling.toLocaleString("en-GB")} m`);
   }
   if (answers.months !== undefined) {
     clauses.push(`departing in ${listMonths(answers.months)}`);
@@ -592,10 +664,7 @@ function explainNothingFits(
       .map((d) => ({
         d,
         breaks: [
-          answers.altitudeCeilingM !== undefined &&
-          d.maxAltitudeM > answers.altitudeCeilingM
-            ? "altitude"
-            : null,
+          ceiling !== undefined && d.maxAltitudeM > ceiling ? "altitude" : null,
           answers.maxDays !== undefined && d.days > answers.maxDays
             ? "length"
             : null,
