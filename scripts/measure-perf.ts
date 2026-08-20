@@ -51,6 +51,19 @@ const ENFORCED = {
 /** Printed with a target, never enforced — too load-dependent on one desktop. */
 const REPORTED = { lcpMs: 2500, tbtMs: 200 };
 
+/**
+ * The layout spine, checked on a display wider than the design was drawn for.
+ *
+ * A flat `max-width` on `.shell` froze every section at 1440px, so a wide
+ * monitor — or simply zooming out, which widens the CSS viewport — pushed the
+ * whole site into a narrow column in the middle of the screen with hundreds of
+ * pixels of nothing either side. It is the quietest kind of regression: nothing
+ * errors, nothing shifts, the page is just wrong on a class of screen nobody
+ * happens to be testing on. Enforced, because it is a property of the build.
+ */
+const WIDE_VIEWPORT = 2560;
+const MIN_SHELL_SHARE = 0.7;
+
 const root = process.cwd();
 
 async function freePort(): Promise<number> {
@@ -282,6 +295,60 @@ try {
         `${viewport.name}: ${m.domNodes} DOM nodes over ${ENFORCED.domNodes}`,
       );
     }
+  }
+
+  /* ---------------------------------------------- the spine on a wide screen */
+
+  const wide = await browser.newPage();
+  await wide.setViewport({ width: WIDE_VIEWPORT, height: 1200 });
+  await wide.goto(`http://127.0.0.1:${port}/`, {
+    waitUntil: "load",
+    timeout: 90_000,
+  });
+  await new Promise((r) => setTimeout(r, 800));
+
+  const spine = await wide.evaluate(() => {
+    const shells = [...document.querySelectorAll(".shell")].map((el) => {
+      const r = el.getBoundingClientRect();
+      return { left: Math.round(r.left), width: Math.round(r.width) };
+    });
+    return {
+      count: shells.length,
+      lefts: [...new Set(shells.map((s) => s.left))],
+      width: shells.length ? Math.max(...shells.map((s) => s.width)) : 0,
+      viewport: window.innerWidth,
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+    };
+  });
+  await wide.close();
+
+  const share = spine.width / spine.viewport;
+  const aligned = spine.lefts.length === 1;
+
+  console.log(`  layout at ${WIDE_VIEWPORT}px`);
+  console.log(
+    `    ${share >= MIN_SHELL_SHARE ? "ok  " : "FAIL"} spine fills    ${Math.round(share * 100)}% of the viewport  (floor ${Math.round(MIN_SHELL_SHARE * 100)}%, ${spine.width}px of ${spine.viewport}px)`,
+  );
+  console.log(
+    `    ${aligned ? "ok  " : "FAIL"} left edge      ${aligned ? `all ${spine.count} sections on ${spine.lefts[0]}px` : `${spine.lefts.length} different edges: ${spine.lefts.join(", ")}`}`,
+  );
+  console.log(
+    `    ${spine.overflow <= 0 ? "ok  " : "FAIL"} no overflow    ${spine.overflow}px`,
+  );
+  console.log("");
+
+  if (share < MIN_SHELL_SHARE) {
+    problems.push(
+      `the spine fills only ${Math.round(share * 100)}% of a ${WIDE_VIEWPORT}px viewport — the page collapses to the middle on a wide screen`,
+    );
+  }
+  if (!aligned) {
+    problems.push(`sections do not share a left edge at ${WIDE_VIEWPORT}px`);
+  }
+  if (spine.overflow > 0) {
+    problems.push(
+      `${spine.overflow}px of horizontal overflow at ${WIDE_VIEWPORT}px`,
+    );
   }
 
   console.log(
