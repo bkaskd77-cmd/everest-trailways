@@ -52,17 +52,37 @@ const ENFORCED = {
 const REPORTED = { lcpMs: 2500, tbtMs: 200 };
 
 /**
- * The layout spine, checked on a display wider than the design was drawn for.
+ * Zoom invariance.
  *
- * A flat `max-width` on `.shell` froze every section at 1440px, so a wide
- * monitor — or simply zooming out, which widens the CSS viewport — pushed the
- * whole site into a narrow column in the middle of the screen with hundreds of
- * pixels of nothing either side. It is the quietest kind of regression: nothing
- * errors, nothing shifts, the page is just wrong on a class of screen nobody
- * happens to be testing on. Enforced, because it is a property of the build.
+ * Browser zoom does one thing to layout: it changes the CSS viewport width to
+ * `windowWidth / zoom`. So zooming a 1512px window to 80% and 50% is exactly a
+ * 1890px and a 3024px viewport, which is what these are.
+ *
+ * The page used to fail this badly. A flat `max-width` on `.shell` meant that
+ * below the cap the spine filled the screen and above it a centring gutter
+ * appeared and grew — so a two-notch zoom change slid the entire layout from 5%
+ * of the screen to 15.7%, and the site visibly collapsed toward the middle.
+ *
+ * What is asserted is not a pixel value but a ratio: every landmark's left edge
+ * must sit at the same fraction of the screen at every zoom level. That is the
+ * property "the layout does not move when you zoom" actually means, and it
+ * holds regardless of what the design width later becomes.
+ *
+ * Type size deliberately does NOT scale with the viewport, which is why zoom
+ * still does something: text gets larger and smaller. WCAG 1.4.4 requires that.
  */
-const WIDE_VIEWPORT = 2560;
-const MIN_SHELL_SHARE = 0.7;
+const ZOOM_VIEWPORTS = [1512, 1890, 3024];
+/** Half a percentage point of screen width. Sub-pixel rounding only. */
+const MAX_SPINE_DRIFT = 0.005;
+const SPINE_LANDMARKS: Record<string, string> = {
+  wordmark: "header .shell a",
+  heroEyebrow: 'section[aria-roledescription="carousel"] .shell p',
+  trustColumn: 'section[aria-labelledby="trust-heading"] li p',
+  departHeading: "#departures-heading",
+  firstCard: 'section[aria-labelledby="departures-heading"] ul > li',
+  matcher: ".on-instrument",
+  footer: "footer .shell p",
+};
 
 const root = process.cwd();
 
@@ -297,59 +317,80 @@ try {
     }
   }
 
-  /* ---------------------------------------------- the spine on a wide screen */
+  /* ------------------------------------------------------- zoom invariance */
 
-  const wide = await browser.newPage();
-  await wide.setViewport({ width: WIDE_VIEWPORT, height: 1200 });
-  await wide.goto(`http://127.0.0.1:${port}/`, {
-    waitUntil: "load",
-    timeout: 90_000,
-  });
-  await new Promise((r) => setTimeout(r, 800));
+  const zoom = await browser.newPage();
+  const readings: {
+    vw: number;
+    insets: Record<string, number>;
+    overflow: number;
+  }[] = [];
 
-  const spine = await wide.evaluate(() => {
-    const shells = [...document.querySelectorAll(".shell")].map((el) => {
-      const r = el.getBoundingClientRect();
-      return { left: Math.round(r.left), width: Math.round(r.width) };
+  for (const vw of ZOOM_VIEWPORTS) {
+    await zoom.setViewport({ width: vw, height: 900 });
+    await zoom.goto(`http://127.0.0.1:${port}/`, {
+      waitUntil: "load",
+      timeout: 90_000,
     });
-    return {
-      count: shells.length,
-      lefts: [...new Set(shells.map((s) => s.left))],
-      width: shells.length ? Math.max(...shells.map((s) => s.width)) : 0,
-      viewport: window.innerWidth,
-      overflow: document.documentElement.scrollWidth - window.innerWidth,
-    };
-  });
-  await wide.close();
-
-  const share = spine.width / spine.viewport;
-  const aligned = spine.lefts.length === 1;
-
-  console.log(`  layout at ${WIDE_VIEWPORT}px`);
-  console.log(
-    `    ${share >= MIN_SHELL_SHARE ? "ok  " : "FAIL"} spine fills    ${Math.round(share * 100)}% of the viewport  (floor ${Math.round(MIN_SHELL_SHARE * 100)}%, ${spine.width}px of ${spine.viewport}px)`,
-  );
-  console.log(
-    `    ${aligned ? "ok  " : "FAIL"} left edge      ${aligned ? `all ${spine.count} sections on ${spine.lefts[0]}px` : `${spine.lefts.length} different edges: ${spine.lefts.join(", ")}`}`,
-  );
-  console.log(
-    `    ${spine.overflow <= 0 ? "ok  " : "FAIL"} no overflow    ${spine.overflow}px`,
-  );
-  console.log("");
-
-  if (share < MIN_SHELL_SHARE) {
-    problems.push(
-      `the spine fills only ${Math.round(share * 100)}% of a ${WIDE_VIEWPORT}px viewport — the page collapses to the middle on a wide screen`,
+    await new Promise((r) => setTimeout(r, 700));
+    readings.push(
+      await zoom.evaluate((selectors: Record<string, string>) => {
+        const width = window.innerWidth;
+        const insets: Record<string, number> = {};
+        for (const [name, selector] of Object.entries(selectors)) {
+          const el = document.querySelector(selector);
+          if (el) insets[name] = el.getBoundingClientRect().left / width;
+        }
+        return {
+          vw: width,
+          insets,
+          overflow: document.documentElement.scrollWidth - width,
+        };
+      }, SPINE_LANDMARKS),
     );
   }
-  if (!aligned) {
-    problems.push(`sections do not share a left edge at ${WIDE_VIEWPORT}px`);
-  }
-  if (spine.overflow > 0) {
-    problems.push(
-      `${spine.overflow}px of horizontal overflow at ${WIDE_VIEWPORT}px`,
+  await zoom.close();
+
+  console.log(
+    `  zoom invariance — left inset as a share of the screen, across ${ZOOM_VIEWPORTS.join("px / ")}px
+`,
+  );
+
+  let worstDrift = 0;
+  for (const name of Object.keys(SPINE_LANDMARKS)) {
+    const values = readings
+      .map((r) => r.insets[name])
+      .filter((v) => typeof v === "number");
+    if (values.length < ZOOM_VIEWPORTS.length) {
+      problems.push(`the ${name} landmark was not found at every viewport`);
+      console.log(`    FAIL ${name.padEnd(14)} not found at every viewport`);
+      continue;
+    }
+    const drift = Math.max(...values) - Math.min(...values);
+    worstDrift = Math.max(worstDrift, drift);
+    const ok = drift <= MAX_SPINE_DRIFT;
+    console.log(
+      `    ${ok ? "ok  " : "FAIL"} ${name.padEnd(14)} ${(Math.min(...values) * 100).toFixed(2)}%  drift ${(drift * 100).toFixed(2)}pp`,
     );
+    if (!ok) {
+      problems.push(
+        `${name} moves ${(drift * 100).toFixed(2)} percentage points of screen width across the zoom range — the layout slides when zoomed`,
+      );
+    }
   }
+
+  const overflowing = readings.filter((r) => r.overflow > 0);
+  console.log(
+    `    ${overflowing.length === 0 ? "ok  " : "FAIL"} ${"no overflow".padEnd(14)} ${overflowing.length === 0 ? "at any viewport" : overflowing.map((r) => `${r.overflow}px at ${r.vw}px`).join(", ")}`,
+  );
+  for (const r of overflowing) {
+    problems.push(`${r.overflow}px of horizontal overflow at ${r.vw}px`);
+  }
+  console.log(
+    `
+    worst drift ${(worstDrift * 100).toFixed(2)}pp against a ${(MAX_SPINE_DRIFT * 100).toFixed(2)}pp ceiling
+`,
+  );
 
   console.log(
     "  ..   = reported, not enforced: too load-dependent to gate on.\n",

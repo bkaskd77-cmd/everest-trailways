@@ -384,23 +384,25 @@
   margin-inline: auto;
   width: 100%;
   /*
-   * The spine scales past the design width instead of stopping dead at it.
+   * A proportional gutter and nothing else. No max-width, deliberately.
    *
-   * A flat `max-width: 90rem` froze every section at 1440px, so on a wide
-   * display — or simply on zooming out, which widens the CSS viewport — the
-   * whole site collapsed into a narrow column in the middle of the screen with
-   * 870px of nothing either side of it. Nothing was misaligned; there was just
-   * far too little of it.
+   * A max-width is a regime change, and browser zoom walks straight through it:
+   * below the cap the spine fills the screen and the only inset is this
+   * padding; above it a centring gutter appears and grows. Measured on a
+   * 1512px window, that moved the left spine from 5% of the screen at 110% zoom
+   * to 15.7% at 80% — the whole page sliding inward by a tenth of the viewport
+   * for a two-notch zoom change. Capping at a wider number only moves where the
+   * jump happens; it does not remove it.
    *
-   * 75vw is not an arbitrary second number: at 1920px, the widest viewport this
-   * design was drawn for, 1440px IS 75% of the screen. So the ratio the layout
-   * already uses at its own ceiling is the ratio it now keeps at any width
-   * beyond it, and the two expressions meet exactly at 1920px. Below that,
-   * `max()` returns 90rem and the geometry is unchanged to the pixel.
+   * 5vw is what the design already used: at 1440px the old 72px cap was exactly
+   * 5% of the viewport, so nothing at or below 1440px moves by a pixel. Above
+   * it the inset simply stays 5% instead of freezing, and zoom becomes what
+   * people expect it to be — the same layout, larger or smaller.
    *
-   * The inner padding is deliberately left capped at 72px. The gutter grows;
-   * the distance from the gutter to the wordmark does not need to.
+   * Line length is capped where it belongs, on the text itself (max-w-[58ch]
+   * and friends), so a wider screen shows a wider layout rather than longer
+   * lines. The 20px floor holds the gutter open on phones, where 5vw would
+   * collapse to nothing.
    */
-  max-width: max(90rem, 75vw);
-  padding-inline: clamp(20px, 5vw, 72px);
+  padding-inline: max(20px, 5vw);
 }
