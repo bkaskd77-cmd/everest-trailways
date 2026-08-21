@@ -7,6 +7,33 @@ import { departures } from "@/content/departures";
 import { departureJsonLd } from "@/lib/departures-feed";
 import { siteConfig } from "@/lib/site";
 
+/** How many dates the homepage shows. The rest live on `/departures`. */
+const FEATURED_COUNT = 6;
+
+/**
+ * The six the homepage shows.
+ *
+ * Soonest first, and at most one date per trek — three Bardia dates in a row
+ * would read as a thin catalogue rather than a broad one, and someone scanning
+ * the homepage is asking "what do you run?" before "when?".
+ *
+ * This cap is the section's own, not a property of the dataset. When the
+ * dataset went from six departures to nineteen the grid rendered all of them:
+ * a 17,000px wall of cards between the trust strip and the footer. The whole
+ * set belongs on `/departures`, which is what the link above the grid is for.
+ */
+function featured() {
+  const seen = new Set<string>();
+  return [...departures]
+    .sort((a, b) => a.departsOn.localeCompare(b.departsOn))
+    .filter((d) => {
+      if (seen.has(d.trekId)) return false;
+      seen.add(d.trekId);
+      return true;
+    })
+    .slice(0, FEATURED_COUNT);
+}
+
 /**
  * Featured departures.
  *
@@ -15,10 +42,13 @@ import { siteConfig } from "@/lib/site";
  * the published minimum and the decision date do the persuading, not adjectives.
  *
  * The JSON-LD is server-rendered per departure so the same facts a traveller
- * reads are the ones a search engine or an assistant can quote.
+ * reads are the ones a search engine or an assistant can quote — and it
+ * describes the six on this page, not all nineteen. `/departures` carries the
+ * full set.
  */
 export function FeaturedDepartures() {
-  const jsonLd = departures.map((d) => departureJsonLd(d, siteConfig.url));
+  const shown = featured();
+  const jsonLd = shown.map((d) => departureJsonLd(d, siteConfig.url));
 
   return (
     <section
@@ -60,7 +90,7 @@ export function FeaturedDepartures() {
                 href="/departures"
                 className="group mt-4 inline-flex items-center gap-2 text-sm font-medium text-prayer-deep dark:text-prayer-light"
               >
-                All departures
+                All {departures.length} departures
                 <ArrowRight
                   aria-hidden
                   className="size-3.5 transition-transform duration-200 group-hover:translate-x-[3px]"
@@ -71,7 +101,7 @@ export function FeaturedDepartures() {
         </Reveal>
 
         <div className="mt-12 lg:mt-14">
-          <DepartureGrid departures={departures} />
+          <DepartureGrid departures={shown} />
         </div>
       </div>
     </section>

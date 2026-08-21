@@ -72,6 +72,20 @@ const ENFORCED = {
   jsKB: 320,
   /** A homepage that needs more nodes than this has a structural problem. */
   domNodes: 2600,
+  /**
+   * Page height, in viewports.
+   *
+   * This exists because of a real regression: the dataset grew from six
+   * departures to nineteen and the homepage grid, which was handed the whole
+   * array, rendered all of them — a 17,000px wall of cards between the trust
+   * strip and the footer. Nothing else caught it. Node counts did not move much
+   * (cards are cheap), CLS was fine, and the build was clean; the page was
+   * simply eleven screens longer than anyone intended.
+   *
+   * A section that renders "all of X" is one dataset away from doing this
+   * again, so the length of the document is now something the build measures.
+   */
+  screens: 14,
 };
 
 /** Printed with a target, never enforced — too load-dependent on one desktop. */
@@ -145,6 +159,7 @@ type Metrics = {
   tbtMs: number;
   jsKB: number;
   domNodes: number;
+  screens: number;
   lcpElement: string | null;
 };
 
@@ -258,6 +273,7 @@ async function measure(
       tbt: w.__tbt as number,
       jsKB: Math.round(js / 1024),
       domNodes: document.getElementsByTagName("*").length,
+      screens: document.documentElement.scrollHeight / window.innerHeight,
     };
   });
 
@@ -271,6 +287,7 @@ async function measure(
     tbtMs: Math.round(after.tbt),
     jsKB: after.jsKB,
     domNodes: after.domNodes,
+    screens: after.screens,
   };
 }
 
@@ -341,6 +358,9 @@ try {
         `    ${mark(m.domNodes <= ENFORCED.domNodes)} DOM nodes      ${String(m.domNodes).padStart(4)}     (ceiling ${ENFORCED.domNodes})`,
       );
       console.log(
+        `    ${mark(m.screens <= ENFORCED.screens)} page length    ${m.screens.toFixed(1).padStart(4)}     screens (ceiling ${ENFORCED.screens})`,
+      );
+      console.log(
         `    ..   LCP            ${m.lcpMs === null ? "unmeasured" : `${m.lcpMs} ms`}  (target ${REPORTED.lcpMs} ms) — ${m.lcpElement ?? "no element"}`,
       );
       console.log(
@@ -360,6 +380,11 @@ try {
       if (m.domNodes > ENFORCED.domNodes) {
         problems.push(
           `${target.name} ${viewport.name}: ${m.domNodes} DOM nodes over ${ENFORCED.domNodes}`,
+        );
+      }
+      if (m.screens > ENFORCED.screens) {
+        problems.push(
+          `${target.name} ${viewport.name}: ${m.screens.toFixed(1)} screens long, over ${ENFORCED.screens}`,
         );
       }
     }
