@@ -2,7 +2,7 @@
 
 import { type Variants } from "motion/react";
 
-import { STAGGER, staggerContainer } from "@/lib/motion";
+import { REVEAL_VIEWPORT, STAGGER, staggerContainer } from "@/lib/motion";
 import { StaggerContext } from "@/components/motion/stagger-context";
 import * as m from "motion/react-m";
 
@@ -47,7 +47,7 @@ export function StaggerGroup({
         variants={variants}
         initial="hidden"
         whileInView="visible"
-        viewport={{ once: true, amount: 0.2 }}
+        viewport={REVEAL_VIEWPORT}
       >
         {children}
       </Component>

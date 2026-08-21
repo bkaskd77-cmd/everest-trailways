@@ -17,6 +17,30 @@ export const DURATION = {
 export const STAGGER = 0.08;
 
 /**
+ * When a scroll-triggered reveal fires.
+ *
+ * `amount` is a fraction **of the element**, not of the screen, and that makes
+ * any fractional value a trap: a group 6,400px tall with `amount: 0.2` needs
+ * 1,280px of itself on screen, which a 900px viewport can never supply. The
+ * trigger is then unsatisfiable and the content stays at opacity 0 forever.
+ * That shipped — the entire /departures grid was invisible at every scroll
+ * position, on a page whose only job is to list nineteen departures.
+ *
+ * So the trigger is a line instead of a fraction: any part of the element,
+ * once its leading edge has climbed 12% of the viewport above the bottom
+ * edge. For a short block that lands where `amount: 0.25` used to; for a block
+ * taller than the screen it still fires, which is the whole point.
+ *
+ * If you are tempted to put a fractional `amount` back, the element you are
+ * animating is one dataset away from being taller than a phone.
+ */
+export const REVEAL_VIEWPORT = {
+  once: true,
+  amount: "some",
+  margin: "0px 0px -12% 0px",
+} as const;
+
+/**
  * Hard ceiling on any single animation.
  *
  * Past this a transition stops reading as a response to something and starts

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type Variants } from "motion/react";
 
-import { fadeUp, withDelay } from "@/lib/motion";
+import { REVEAL_VIEWPORT, fadeUp, withDelay } from "@/lib/motion";
 import { StaggerContext } from "@/components/motion/stagger-context";
 import * as m from "motion/react-m";
 
@@ -54,7 +54,7 @@ export function Reveal({
       variants={resolved}
       initial="hidden"
       whileInView="visible"
-      viewport={{ once: true, amount: 0.25 }}
+      viewport={REVEAL_VIEWPORT}
     >
       {children}
     </Component>

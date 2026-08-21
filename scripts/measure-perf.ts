@@ -52,7 +52,13 @@ const VIEWPORTS: Viewport[] = [
  */
 const longest = departures.reduce((a, b) => (b.days > a.days ? b : a));
 
-const PAGES: { name: string; path: string; answersMatcher: boolean }[] = [
+const PAGES: {
+  name: string;
+  path: string;
+  answersMatcher: boolean;
+  /** Overrides ENFORCED.screens where a page is legitimately longer. */
+  screens?: number;
+}[] = [
   { name: "homepage", path: "/", answersMatcher: true },
   {
     // The longest itinerary on sale, not the first in the array: the point of
@@ -61,6 +67,22 @@ const PAGES: { name: string; path: string; answersMatcher: boolean }[] = [
     name: `departure /${longest.slug}`,
     path: `/departures/${longest.slug}`,
     answersMatcher: false,
+  },
+  // The index, because it holds every departure and is therefore the page that
+  // grows without anyone editing it.
+  {
+    name: "index /departures",
+    path: "/departures",
+    answersMatcher: false,
+    /*
+     * An index is allowed to be long — listing everything is the page's job,
+     * and the filters at the top are how you make it short. Nineteen cards in
+     * one column is 21 screens on a phone, which is honest but not comfortable;
+     * whether that becomes pagination is a design decision, not a regression.
+     * The ceiling is raised deliberately and stays enforced, so the page cannot
+     * drift past what a filterable list can excuse.
+     */
+    screens: 24,
   },
 ];
 
@@ -160,6 +182,7 @@ type Metrics = {
   jsKB: number;
   domNodes: number;
   screens: number;
+  invisible: string[];
   lcpElement: string | null;
 };
 
@@ -274,6 +297,39 @@ async function measure(
       jsKB: Math.round(js / 1024),
       domNodes: document.getElementsByTagName("*").length,
       screens: document.documentElement.scrollHeight / window.innerHeight,
+      /*
+       * Content the page never revealed.
+       *
+       * The whole document has been scrolled through by this point, so every
+       * scroll-triggered reveal that was ever going to fire has fired. Anything
+       * still fully transparent is content a reader cannot reach — which is
+       * exactly how the /departures grid shipped blank: a viewport trigger
+       * asking for a fraction of an element taller than the screen can never
+       * be satisfied, so nineteen cards sat at opacity 0 at every scroll
+       * position, in a perfectly valid DOM.
+       *
+       * Only substantial, laid-out elements count. A deliberately hidden
+       * decorative layer is not what this is looking for; a card with 400px of
+       * text in it is.
+       */
+      invisible: [...document.querySelectorAll<HTMLElement>("body *")]
+        .filter((el) => {
+          if (Number(getComputedStyle(el).opacity) > 0.01) return false;
+          const box = el.getBoundingClientRect();
+          if (box.width < 80 || box.height < 40) return false;
+          if ((el.innerText ?? "").trim().length < 20) return false;
+          // Only the outermost transparent element — a hidden card would
+          // otherwise report every node inside it.
+          return !(
+            el.parentElement &&
+            Number(getComputedStyle(el.parentElement).opacity) <= 0.01
+          );
+        })
+        .slice(0, 6)
+        .map(
+          (el) =>
+            `${el.tagName.toLowerCase()}.${el.className.toString().split(" ")[0]} "${(el.innerText ?? "").trim().slice(0, 40).replace(/\s+/g, " ")}"`,
+        ),
     };
   });
 
@@ -288,6 +344,7 @@ async function measure(
     jsKB: after.jsKB,
     domNodes: after.domNodes,
     screens: after.screens,
+    invisible: after.invisible,
   };
 }
 
@@ -347,6 +404,7 @@ try {
       await page.close();
 
       const mark = (ok: boolean) => (ok ? "ok  " : "FAIL");
+      const screenCeiling = target.screens ?? ENFORCED.screens;
       console.log(`  ${target.name} — ${viewport.name}`);
       console.log(
         `    ${mark(m.clsAfterInteraction <= ENFORCED.cls)} CLS            ${m.clsAfterInteraction.toFixed(4)}  (first paint ${m.clsInitial.toFixed(4)}, ceiling ${ENFORCED.cls})`,
@@ -358,8 +416,12 @@ try {
         `    ${mark(m.domNodes <= ENFORCED.domNodes)} DOM nodes      ${String(m.domNodes).padStart(4)}     (ceiling ${ENFORCED.domNodes})`,
       );
       console.log(
-        `    ${mark(m.screens <= ENFORCED.screens)} page length    ${m.screens.toFixed(1).padStart(4)}     screens (ceiling ${ENFORCED.screens})`,
+        `    ${mark(m.screens <= screenCeiling)} page length    ${m.screens.toFixed(1).padStart(4)}     screens (ceiling ${screenCeiling})`,
       );
+      console.log(
+        `    ${mark(m.invisible.length === 0)} all content    ${m.invisible.length === 0 ? "reachable" : `${m.invisible.length} block(s) never revealed`}`,
+      );
+      for (const el of m.invisible) console.log(`         ${el}`);
       console.log(
         `    ..   LCP            ${m.lcpMs === null ? "unmeasured" : `${m.lcpMs} ms`}  (target ${REPORTED.lcpMs} ms) — ${m.lcpElement ?? "no element"}`,
       );
@@ -382,9 +444,14 @@ try {
           `${target.name} ${viewport.name}: ${m.domNodes} DOM nodes over ${ENFORCED.domNodes}`,
         );
       }
-      if (m.screens > ENFORCED.screens) {
+      if (m.screens > screenCeiling) {
         problems.push(
-          `${target.name} ${viewport.name}: ${m.screens.toFixed(1)} screens long, over ${ENFORCED.screens}`,
+          `${target.name} ${viewport.name}: ${m.screens.toFixed(1)} screens long, over ${screenCeiling}`,
+        );
+      }
+      if (m.invisible.length) {
+        problems.push(
+          `${target.name} ${viewport.name}: ${m.invisible.length} block(s) still at opacity 0 after scrolling the whole page — ${m.invisible[0]}`,
         );
       }
     }
