@@ -69,6 +69,61 @@ names and any total exceeding `seatsBooked`.
 4:3, 1200px wide minimum, same swap-a-string pattern as the hero: change only
 `image.src` to `/departures/<id>.jpg` once real photography lands.
 
+## Two files, not one
+
+`treks.ts` holds the route: name, region, difficulty, guide ratio, summary,
+physical demand, and the itinerary. `departures.ts` holds the date: when it
+leaves, what it costs, how many seats have gone.
+
+They are separate because two Everest dates walk the same trail. Duplicating a
+twelve-day itinerary across every date on it is how the March version quietly
+acquires an extra acclimatisation day the October one does not have.
+
+A departure is written as a **seed** — `trekId`, `departsOn`, price, seats — and
+`compose()` derives the rest: `days`, `returnsOn`, `decisionDate`, `slug`,
+`costSheetHref`, `acclimatisationDays`, and every field copied from the trek. So
+a date cannot disagree with its own route, because it does not restate it.
+
+To add a departure, add a seed. To add a trek, add a `TrekProfile` and give it
+an entry in `TREK_INTENT` — the matcher guard fails on an untagged trek, because
+a trek with no intent can never be returned to anyone.
+
+## Itinerary rules
+
+`sleepAltitudeM` is required on every day and it is **the altitude you sleep
+at**, not the day's high point. This is the field that matters: altitude illness
+is governed by where you spend the night, and an itinerary that advertises its
+peaks while omitting its sleeping heights has published the flattering half. Put
+the day's high point in `maxAltitudeM` when the walk goes over something —
+Thorong La, Kala Patthar — and leave it out when it doesn't.
+
+**Acclimatisation days are marked and never hidden.** `isAcclimatisation: true`
+puts a day on the altitude profile as a distinct marker and labels it in the
+day-by-day list. An operator who removes them to make a trek look shorter and
+cheaper has removed the part that keeps people well. They are counted, published,
+and priced in.
+
+**Travel days are marked and never disguised as trekking days.**
+`isTravelDay: true` for a drive, a flight, or an arrival. A five-day Chitwan trip
+with two travel days is a five-day trip with two travel days; calling it five
+days of wildlife is the ordinary lie in this market and the reason the maximum
+altitude is re-derived from walking days only.
+
+The last day must end at a return point (`RETURN_POINTS` — Kathmandu or
+Pokhara). An itinerary that ends at Lukla has ended halfway.
+
+## Coverage floors
+
+The matcher can only answer with what is in stock. Six departures meant most
+honest answers returned an empty list, so `check:departures` now holds floors:
+at least 16 departures across at least 8 treks; at least 4 under 3,000 m; at
+least 4 in October or November; every month from September 2026 to May 2027
+represented; at least 3 distinct treks of 7 days or fewer; at least three
+distinct fill states, including one `full`.
+
+The `full` one is deliberate. A seat meter that never shows its own end state
+has an end state nobody has ever looked at.
+
 ## Checking
 
 ```bash
@@ -80,3 +135,20 @@ Runs before every build. Fails on: empty `priceExcludes`, missing
 `returnsOn <= departsOn`, `decisionDate` after `departsOn`, a departure in the
 past, a missing `singleSupplementUSD`, name-like `groupSoFar` entries, a status
 contradiction, and a malformed `/api/departures/feed.json` shape.
+
+Since step 6 it also fails on: a duplicate `slug`, a day missing
+`sleepAltitudeM`, an itinerary day count that disagrees with `days`, a day whose
+`maxAltitudeM` is below its own `sleepAltitudeM`, an advertised `maxAltitudeM`
+the walking days never reach, a last day that does not return to Kathmandu or
+Pokhara, `acclimatisationDays` that has drifted from the days actually marked,
+a `groupSizeMax` below `seatsTotal`, and any coverage floor above.
+
+```bash
+pnpm check:links
+```
+
+Also runs before every build. It reads every internal `href` out of `src/**` and
+resolves it against the route files on disk, filling `/departures/[slug]` with
+the nineteen slugs that actually exist. Nothing on this site is allowed to link
+to a 404 — a page whose argument is "check us" cannot have a nav bar pointing
+into nothing.

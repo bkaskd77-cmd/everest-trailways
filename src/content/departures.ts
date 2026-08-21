@@ -1,3 +1,12 @@
+import { TREKS, type ItineraryDay, type PhysicalDemand } from "./treks.ts";
+
+export {
+  RETURN_POINTS,
+  TREKS,
+  type ItineraryDay,
+  type PhysicalDemand,
+} from "./treks.ts";
+
 /**
  * Fixed departures.
  *
@@ -16,14 +25,23 @@
  *      double-occupancy figure with a supplement bolted on later. Hidden cost
  *      is the single biggest complaint in this market.
  *   2. `singleSupplementUSD` is always displayed, including when it is 0.
- *      Omitting it is how the number gets sprung on someone at checkout.
- *   3. `priceExcludes` must be non-empty. Every trip excludes something; a
- *      blank list means nobody has written it down yet, not that it is all-in.
+ *   3. `priceExcludes` must be non-empty. Every trip excludes something.
  *   4. `minimumToRun` and `decisionDate` are always public. This is the entire
  *      point of the section — the threshold is the promise.
- *   5. `groupSoFar` is country and count only. Never names, never ages, never
- *      anything that could identify a person who has already booked.
+ *   5. `groupSoFar` is country and count only. Never names, never ages.
  *   6. Status is DERIVED, never stored. See `departureStatus`.
+ *
+ * WHAT A SEED CARRIES, AND WHY THAT IS ALL.
+ *
+ * Everything about the route — itinerary, altitudes, physical demand, group
+ * cap — lives on the TREK, in treks.ts. A seed carries only what genuinely
+ * differs between two dates on the same route: when it goes, who has booked,
+ * what it costs, and the photograph. Anything derivable is derived here rather
+ * than typed twice: `days` comes from the itinerary length, `returnsOn` from
+ * the departure date and that length, `decisionDate` from the lead time,
+ * `acclimatisationDays` from the days marked as such, and `slug` and
+ * `costSheetHref` from the trek and the month. None of those can drift out of
+ * step with each other, because there is only one of each.
  *
  * Full guidance in departures.README.md.
  */
@@ -33,12 +51,22 @@ export type DepartureStatus =
 
 export type Departure = {
   id: string;
+  /** URL segment. Unique across all departures; the guard enforces it. */
+  slug: string;
   trekId: string;
   trekName: string;
   region: string;
   days: number;
+  /** The highest point reached on a walking day. Travel days do not count. */
   maxAltitudeM: number;
   difficulty: "moderate" | "challenging" | "strenuous";
+  /** Two sentences. Factual — the banned adjective list applies here too. */
+  summary: string;
+  itinerary: ItineraryDay[];
+  physicalDemand: PhysicalDemand;
+  groupSizeMax: number;
+  /** Day numbers that are rest or acclimatisation. Derived from the itinerary. */
+  acclimatisationDays: number[];
   /** ISO date. */
   departsOn: string;
   returnsOn: string;
@@ -48,7 +76,7 @@ export type Departure = {
   minimumToRun: number;
   /** ISO date the guarantee was reached, when it has been. */
   guaranteedAt?: string;
-  /** ISO date by which run / no-run is decided, always before departure. */
+  /** ISO date by which run / no-run is decided, always before departsOn. */
   decisionDate: string;
   guideRatio: string;
   /** Altitude in metres above which a second guide joins the group. */
@@ -66,258 +94,577 @@ export type Departure = {
   image: { src: string; alt: string };
 };
 
-/** Swap to "/departures/everest-oct.jpg" when real photography lands. */
-const unsplash = (id: string) =>
-  `https://images.unsplash.com/${id}?auto=format&fit=crop&w=1200&h=900&q=75`;
+/* -------------------------------------------------------- price line items */
 
-export const departures: Departure[] = [
+const PERMITS_HIGH = [
+  "All national park and conservation area permits",
+  "TIMS card",
+];
+
+const CORE_INCLUDES = [
+  "Guide and porter wages, insurance and equipment",
+  "Airport transfers on arrival and departure",
+];
+
+const CORE_EXCLUDES = [
+  "International flights",
+  "Travel and evacuation insurance",
+  "Tips (our policy is published, not expected)",
+];
+
+/* ---------------------------------------------------------------- the seeds */
+
+type Seed = {
+  id: string;
+  trekId: string;
+  departsOn: string;
+  seatsTotal: number;
+  seatsBooked: number;
+  minimumToRun: number;
+  guaranteedAt?: string;
+  priceUSD: number;
+  singleSupplementUSD: number;
+  priceIncludes: string[];
+  priceExcludes: string[];
+  groupSoFar: { country: string; count: number }[];
+  image: { src: string; alt: string };
+};
+
+/** Swap to "/departures/<id>.jpg" when real photography lands. */
+const unsplash = (id: string) =>
+  `https://images.unsplash.com/${id}?auto=format&fit=crop&w=1600&h=1200&q=75`;
+
+const PHOTO = {
+  khumbu: {
+    src: unsplash("photo-1693717671076-374d59bc2ff2"),
+    alt: "The trail into Everest Base Camp below the Khumbu icefall.",
+  },
+  sanctuary: {
+    src: unsplash("photo-1531719555052-632b0348c404"),
+    alt: "The Annapurna sanctuary rim at first light.",
+  },
+  circuit: {
+    src: unsplash("photo-1538279288577-f2551fb138ba"),
+    alt: "The high crossing on the Annapurna Circuit under clear sky.",
+  },
+  langtang: {
+    src: unsplash("photo-1741755072624-7dffb6bed861"),
+    alt: "Trekkers on the valley floor beneath the Langtang range.",
+  },
+  mustang: {
+    src: unsplash("photo-1758701320941-89f86492c1ef"),
+    alt: "A walled village and terraced fields on the Upper Mustang valley floor.",
+  },
+  terai: {
+    src: unsplash("photo-1700366776973-20bda63d5b1a"),
+    alt: "A slow river running through sal forest in the Terai lowlands.",
+  },
+} as const;
+
+/** Days between the decision date and departure. Published, never moved. */
+const DECISION_LEAD_DAYS = 30;
+
+const SEEDS: Seed[] = [
+  {
+    id: "ktm-rim-2026-09-07",
+    trekId: "kathmandu-valley-rim",
+    departsOn: "2026-09-07",
+    seatsTotal: 14,
+    seatsBooked: 9,
+    minimumToRun: 5,
+    guaranteedAt: "2026-07-14",
+    priceUSD: 540,
+    singleSupplementUSD: 90,
+    priceIncludes: [
+      "Shivapuri National Park entry and valley permits",
+      ...CORE_INCLUDES,
+      "Lodge and hotel accommodation, twin or single",
+    ],
+    priceExcludes: [...CORE_EXCLUDES, "Lunches and dinners in Kathmandu"],
+    groupSoFar: [
+      { country: "United Kingdom", count: 3 },
+      { country: "Australia", count: 2 },
+      { country: "Germany", count: 2 },
+      { country: "Japan", count: 2 },
+    ],
+    image: PHOTO.langtang,
+  },
+  {
+    id: "poonhill-2026-09-21",
+    trekId: "poon-hill",
+    departsOn: "2026-09-21",
+    seatsTotal: 12,
+    seatsBooked: 3,
+    minimumToRun: 5,
+    priceUSD: 690,
+    singleSupplementUSD: 0,
+    priceIncludes: [
+      "ACAP permit and TIMS card",
+      ...CORE_INCLUDES,
+      "Pokhara transfers and teahouse accommodation",
+    ],
+    priceExcludes: [...CORE_EXCLUDES, "Meals in Pokhara"],
+    groupSoFar: [
+      { country: "Netherlands", count: 2 },
+      { country: "Canada", count: 1 },
+    ],
+    image: PHOTO.sanctuary,
+  },
+  {
+    id: "mardi-2026-10-03",
+    trekId: "mardi-himal",
+    departsOn: "2026-10-03",
+    seatsTotal: 10,
+    seatsBooked: 8,
+    minimumToRun: 4,
+    guaranteedAt: "2026-06-20",
+    priceUSD: 860,
+    singleSupplementUSD: 0,
+    priceIncludes: [
+      "ACAP permit and TIMS card",
+      ...CORE_INCLUDES,
+      "Pokhara transfers and teahouse accommodation",
+    ],
+    priceExcludes: [...CORE_EXCLUDES, "Meals in Pokhara"],
+    groupSoFar: [
+      { country: "France", count: 2 },
+      { country: "United States", count: 2 },
+      { country: "Singapore", count: 2 },
+      { country: "Ireland", count: 2 },
+    ],
+    image: PHOTO.sanctuary,
+  },
   {
     id: "ebc-2026-10-14",
     trekId: "everest-base-camp",
-    trekName: "Everest Base Camp",
-    region: "Khumbu",
-    days: 12,
-    maxAltitudeM: 5364,
-    difficulty: "challenging",
     departsOn: "2026-10-14",
-    returnsOn: "2026-10-25",
     seatsTotal: 12,
     seatsBooked: 7,
     minimumToRun: 4,
     guaranteedAt: "2026-06-02",
-    decisionDate: "2026-09-14",
-    guideRatio: "1:4",
-    assistantGuideAbove: 4000,
     priceUSD: 1890,
     singleSupplementUSD: 0,
     priceIncludes: [
-      "All permits and TIMS card",
+      ...PERMITS_HIGH,
       "Kathmandu–Lukla flights",
-      "Guide and porter wages, insurance and equipment",
+      ...CORE_INCLUDES,
       "Teahouse accommodation, twin or single at no extra cost",
     ],
-    priceExcludes: [
-      "International flights",
-      "Travel and evacuation insurance",
-      "Lunches and dinners in Kathmandu",
-      "Tips (our policy is published, not expected)",
-    ],
-    costSheetHref: "/pricing/ebc-2026-10-14",
+    priceExcludes: [...CORE_EXCLUDES, "Lunches and dinners in Kathmandu"],
     groupSoFar: [
       { country: "Germany", count: 2 },
       { country: "Australia", count: 2 },
       { country: "Canada", count: 1 },
       { country: "Singapore", count: 2 },
     ],
-    image: {
-      src: unsplash("photo-1693717671076-374d59bc2ff2"),
-      alt: "The trail into Everest Base Camp below the Khumbu icefall.",
-    },
+    image: PHOTO.khumbu,
+  },
+  {
+    id: "bardia-2026-10-26",
+    trekId: "bardia-wildlife",
+    departsOn: "2026-10-26",
+    seatsTotal: 8,
+    seatsBooked: 4,
+    minimumToRun: 4,
+    guaranteedAt: "2026-08-01",
+    priceUSD: 1180,
+    singleSupplementUSD: 210,
+    priceIncludes: [
+      "Bardia National Park permits and ranger fees",
+      "Kathmandu–Nepalgunj flights",
+      ...CORE_INCLUDES,
+      "Lodge accommodation and all meals in the park",
+    ],
+    priceExcludes: [...CORE_EXCLUDES, "Meals outside the park"],
+    groupSoFar: [
+      { country: "Denmark", count: 2 },
+      { country: "United Kingdom", count: 2 },
+    ],
+    image: PHOTO.terai,
   },
   {
     id: "abc-2026-11-02",
     trekId: "annapurna-base-camp",
-    trekName: "Annapurna Base Camp",
-    region: "Annapurna",
-    days: 9,
-    maxAltitudeM: 4130,
-    difficulty: "moderate",
     departsOn: "2026-11-02",
-    returnsOn: "2026-11-10",
     seatsTotal: 10,
     seatsBooked: 10,
     minimumToRun: 4,
     guaranteedAt: "2026-05-19",
-    decisionDate: "2026-10-02",
-    guideRatio: "1:4",
     priceUSD: 1240,
     singleSupplementUSD: 0,
     priceIncludes: [
-      "All permits and TIMS card",
+      "ACAP permit and TIMS card",
       "Pokhara transfers",
-      "Guide and porter wages, insurance and equipment",
+      ...CORE_INCLUDES,
       "Teahouse accommodation",
     ],
-    priceExcludes: [
-      "International flights",
-      "Travel and evacuation insurance",
-      "Meals in Pokhara",
-      "Tips",
-    ],
-    costSheetHref: "/pricing/abc-2026-11-02",
+    priceExcludes: [...CORE_EXCLUDES, "Meals in Pokhara"],
     groupSoFar: [
       { country: "United Kingdom", count: 3 },
       { country: "Netherlands", count: 2 },
       { country: "Japan", count: 2 },
       { country: "Brazil", count: 2 },
     ],
-    image: {
-      src: unsplash("photo-1531719555052-632b0348c404"),
-      alt: "The Annapurna sanctuary rim at first light.",
-    },
+    image: PHOTO.sanctuary,
   },
   {
-    id: "acircuit-2027-03-08",
-    trekId: "annapurna-circuit",
-    trekName: "Annapurna Circuit",
-    region: "Annapurna",
-    days: 14,
-    maxAltitudeM: 5416,
-    difficulty: "strenuous",
-    departsOn: "2027-03-08",
-    returnsOn: "2027-03-21",
-    seatsTotal: 12,
+    id: "bardia-2026-11-16",
+    trekId: "bardia-wildlife",
+    departsOn: "2026-11-16",
+    seatsTotal: 8,
     seatsBooked: 2,
     minimumToRun: 4,
-    decisionDate: "2027-02-06",
-    guideRatio: "1:4",
-    assistantGuideAbove: 4500,
-    priceUSD: 1675,
-    singleSupplementUSD: 0,
+    priceUSD: 1180,
+    singleSupplementUSD: 210,
     priceIncludes: [
-      "All permits and TIMS card",
-      "Kathmandu and Pokhara transfers",
-      "Guide and porter wages, insurance and equipment",
-      "Teahouse accommodation",
+      "Bardia National Park permits and ranger fees",
+      "Kathmandu–Nepalgunj flights",
+      ...CORE_INCLUDES,
+      "Lodge accommodation and all meals in the park",
     ],
-    priceExcludes: [
-      "International flights",
-      "Travel and evacuation insurance",
-      "Jeep transfer if Thorong La is closed",
-      "Tips",
-    ],
-    costSheetHref: "/pricing/acircuit-2027-03-08",
-    groupSoFar: [
-      { country: "France", count: 1 },
-      { country: "United States", count: 1 },
-    ],
-    image: {
-      src: unsplash("photo-1538279288577-f2551fb138ba"),
-      alt: "The high crossing on the Annapurna Circuit under clear sky.",
-    },
+    priceExcludes: [...CORE_EXCLUDES, "Meals outside the park"],
+    groupSoFar: [{ country: "Switzerland", count: 2 }],
+    image: PHOTO.terai,
   },
   {
     id: "langtang-2026-11-21",
     trekId: "langtang-valley",
-    trekName: "Langtang Valley",
-    region: "Langtang",
-    days: 7,
-    maxAltitudeM: 4984,
-    difficulty: "moderate",
     departsOn: "2026-11-21",
-    returnsOn: "2026-11-27",
     seatsTotal: 10,
     seatsBooked: 3,
     minimumToRun: 4,
-    decisionDate: "2026-10-21",
-    guideRatio: "1:4",
     priceUSD: 980,
     singleSupplementUSD: 0,
     priceIncludes: [
-      "All permits and TIMS card",
+      "Langtang National Park permit and TIMS card",
       "Kathmandu–Syabrubesi transfers",
-      "Guide and porter wages, insurance and equipment",
+      ...CORE_INCLUDES,
       "Teahouse accommodation",
     ],
-    priceExcludes: [
-      "International flights",
-      "Travel and evacuation insurance",
-      "Meals in Kathmandu",
-      "Tips",
-    ],
-    costSheetHref: "/pricing/langtang-2026-11-21",
+    priceExcludes: [...CORE_EXCLUDES, "Meals in Kathmandu"],
     groupSoFar: [
       { country: "Italy", count: 2 },
       { country: "South Korea", count: 1 },
     ],
-    image: {
-      src: unsplash("photo-1741755072624-7dffb6bed861"),
-      alt: "Trekkers on the valley floor beneath the Langtang range.",
-    },
+    image: PHOTO.langtang,
   },
   {
-    id: "mustang-2027-04-12",
-    trekId: "upper-mustang",
-    trekName: "Upper Mustang",
-    region: "Mustang",
-    days: 13,
-    maxAltitudeM: 3840,
-    difficulty: "moderate",
-    departsOn: "2027-04-12",
-    returnsOn: "2027-04-24",
+    id: "poonhill-2026-12-05",
+    trekId: "poon-hill",
+    departsOn: "2026-12-05",
+    seatsTotal: 12,
+    seatsBooked: 6,
+    minimumToRun: 5,
+    guaranteedAt: "2026-08-10",
+    priceUSD: 690,
+    singleSupplementUSD: 0,
+    priceIncludes: [
+      "ACAP permit and TIMS card",
+      ...CORE_INCLUDES,
+      "Pokhara transfers and teahouse accommodation",
+    ],
+    priceExcludes: [...CORE_EXCLUDES, "Meals in Pokhara"],
+    groupSoFar: [
+      { country: "Spain", count: 2 },
+      { country: "Poland", count: 2 },
+      { country: "New Zealand", count: 2 },
+    ],
+    image: PHOTO.sanctuary,
+  },
+  {
+    id: "ktm-rim-2026-12-18",
+    trekId: "kathmandu-valley-rim",
+    departsOn: "2026-12-18",
+    seatsTotal: 14,
+    seatsBooked: 12,
+    minimumToRun: 5,
+    guaranteedAt: "2026-07-30",
+    priceUSD: 540,
+    singleSupplementUSD: 90,
+    priceIncludes: [
+      "Shivapuri National Park entry and valley permits",
+      ...CORE_INCLUDES,
+      "Lodge and hotel accommodation, twin or single",
+    ],
+    priceExcludes: [...CORE_EXCLUDES, "Lunches and dinners in Kathmandu"],
+    groupSoFar: [
+      { country: "United States", count: 4 },
+      { country: "Germany", count: 3 },
+      { country: "Belgium", count: 2 },
+      { country: "Sweden", count: 3 },
+    ],
+    image: PHOTO.langtang,
+  },
+  {
+    id: "chitwan-2027-01-11",
+    trekId: "chitwan-safari",
+    departsOn: "2027-01-11",
+    seatsTotal: 10,
+    seatsBooked: 7,
+    minimumToRun: 4,
+    guaranteedAt: "2026-08-12",
+    priceUSD: 720,
+    singleSupplementUSD: 145,
+    priceIncludes: [
+      "National park permits and naturalist guide fees",
+      "Kathmandu–Chitwan transfers",
+      ...CORE_INCLUDES,
+      "Lodge accommodation and all meals in the park",
+    ],
+    priceExcludes: [...CORE_EXCLUDES, "Meals outside the park"],
+    groupSoFar: [
+      { country: "India", count: 2 },
+      { country: "United Kingdom", count: 3 },
+      { country: "Norway", count: 2 },
+    ],
+    image: PHOTO.terai,
+  },
+  {
+    id: "bardia-2027-02-01",
+    trekId: "bardia-wildlife",
+    departsOn: "2027-02-01",
     seatsTotal: 8,
     seatsBooked: 6,
     minimumToRun: 4,
-    guaranteedAt: "2026-08-01",
-    decisionDate: "2027-03-12",
-    guideRatio: "1:4",
-    priceUSD: 2450,
-    singleSupplementUSD: 320,
+    guaranteedAt: "2026-08-05",
+    priceUSD: 1180,
+    singleSupplementUSD: 210,
     priceIncludes: [
-      "Restricted-area permit, itemised in full",
-      "ACAP permit and TIMS card",
-      "Guide and porter wages, insurance and equipment",
-      "Lodge accommodation",
+      "Bardia National Park permits and ranger fees",
+      "Kathmandu–Nepalgunj flights",
+      ...CORE_INCLUDES,
+      "Lodge accommodation and all meals in the park",
     ],
-    priceExcludes: [
-      "International flights",
-      "Travel and evacuation insurance",
-      "Pokhara–Jomsom flight if roads are closed",
-      "Tips",
-    ],
-    costSheetHref: "/pricing/mustang-2027-04-12",
+    priceExcludes: [...CORE_EXCLUDES, "Meals outside the park"],
     groupSoFar: [
-      { country: "Australia", count: 2 },
-      { country: "Germany", count: 1 },
-      { country: "Spain", count: 1 },
+      { country: "Netherlands", count: 2 },
+      { country: "Austria", count: 2 },
+      { country: "Canada", count: 2 },
     ],
-    image: {
-      src: unsplash("photo-1758701320941-89f86492c1ef"),
-      alt: "A walled village and terraced fields on the Upper Mustang valley floor.",
-    },
+    image: PHOTO.terai,
   },
   {
     id: "chitwan-2027-02-15",
     trekId: "chitwan-safari",
-    trekName: "Chitwan River & Jungle",
-    region: "Terai",
-    days: 5,
-    maxAltitudeM: 415,
-    difficulty: "moderate",
     departsOn: "2027-02-15",
-    returnsOn: "2027-02-19",
     seatsTotal: 10,
     seatsBooked: 5,
     minimumToRun: 4,
     guaranteedAt: "2026-09-30",
-    decisionDate: "2027-01-15",
-    guideRatio: "1:6",
     priceUSD: 720,
     singleSupplementUSD: 145,
     priceIncludes: [
-      "National park permits and guide fees",
+      "National park permits and naturalist guide fees",
       "Kathmandu–Chitwan transfers",
-      "Naturalist guide wages and insurance",
-      "Lodge accommodation and all meals in park",
+      ...CORE_INCLUDES,
+      "Lodge accommodation and all meals in the park",
     ],
-    priceExcludes: [
-      "International flights",
-      "Travel and evacuation insurance",
-      "Meals outside the park",
-      "Tips",
-    ],
-    costSheetHref: "/pricing/chitwan-2027-02-15",
+    priceExcludes: [...CORE_EXCLUDES, "Meals outside the park"],
     groupSoFar: [
       { country: "United Kingdom", count: 2 },
       { country: "Denmark", count: 2 },
       { country: "India", count: 1 },
     ],
-    image: {
-      src: unsplash("photo-1700366776973-20bda63d5b1a"),
-      alt: "A slow river running through sal forest in the Terai lowlands.",
-    },
+    image: PHOTO.terai,
+  },
+  {
+    id: "ktm-rim-2027-02-26",
+    trekId: "kathmandu-valley-rim",
+    departsOn: "2027-02-26",
+    seatsTotal: 14,
+    seatsBooked: 3,
+    minimumToRun: 5,
+    priceUSD: 560,
+    singleSupplementUSD: 90,
+    priceIncludes: [
+      "Shivapuri National Park entry and valley permits",
+      ...CORE_INCLUDES,
+      "Lodge and hotel accommodation, twin or single",
+    ],
+    priceExcludes: [...CORE_EXCLUDES, "Lunches and dinners in Kathmandu"],
+    groupSoFar: [
+      { country: "Portugal", count: 2 },
+      { country: "Finland", count: 1 },
+    ],
+    image: PHOTO.langtang,
+  },
+  {
+    id: "acircuit-2027-03-08",
+    trekId: "annapurna-circuit",
+    departsOn: "2027-03-08",
+    seatsTotal: 12,
+    seatsBooked: 2,
+    minimumToRun: 4,
+    priceUSD: 1675,
+    singleSupplementUSD: 0,
+    priceIncludes: [
+      "ACAP permit and TIMS card",
+      "Kathmandu and Pokhara transfers",
+      ...CORE_INCLUDES,
+      "Teahouse accommodation",
+    ],
+    priceExcludes: [
+      ...CORE_EXCLUDES,
+      "Jeep transfer if Thorong La is closed",
+      "Meals in Pokhara and Kathmandu",
+    ],
+    groupSoFar: [
+      { country: "France", count: 1 },
+      { country: "United States", count: 1 },
+    ],
+    image: PHOTO.circuit,
+  },
+  {
+    id: "ebc-2027-03-22",
+    trekId: "everest-base-camp",
+    departsOn: "2027-03-22",
+    seatsTotal: 12,
+    seatsBooked: 5,
+    minimumToRun: 4,
+    guaranteedAt: "2026-08-15",
+    priceUSD: 1890,
+    singleSupplementUSD: 0,
+    priceIncludes: [
+      ...PERMITS_HIGH,
+      "Kathmandu–Lukla flights",
+      ...CORE_INCLUDES,
+      "Teahouse accommodation, twin or single at no extra cost",
+    ],
+    priceExcludes: [...CORE_EXCLUDES, "Lunches and dinners in Kathmandu"],
+    groupSoFar: [
+      { country: "Australia", count: 2 },
+      { country: "Ireland", count: 2 },
+      { country: "Mexico", count: 1 },
+    ],
+    image: PHOTO.khumbu,
+  },
+  {
+    id: "mardi-2027-04-05",
+    trekId: "mardi-himal",
+    departsOn: "2027-04-05",
+    seatsTotal: 10,
+    seatsBooked: 1,
+    minimumToRun: 4,
+    priceUSD: 860,
+    singleSupplementUSD: 0,
+    priceIncludes: [
+      "ACAP permit and TIMS card",
+      ...CORE_INCLUDES,
+      "Pokhara transfers and teahouse accommodation",
+    ],
+    priceExcludes: [...CORE_EXCLUDES, "Meals in Pokhara"],
+    groupSoFar: [{ country: "Germany", count: 1 }],
+    image: PHOTO.sanctuary,
+  },
+  {
+    id: "mustang-2027-04-12",
+    trekId: "upper-mustang",
+    departsOn: "2027-04-12",
+    seatsTotal: 8,
+    seatsBooked: 6,
+    minimumToRun: 4,
+    guaranteedAt: "2026-08-01",
+    priceUSD: 2450,
+    singleSupplementUSD: 320,
+    priceIncludes: [
+      "Restricted-area permit, itemised in full",
+      "ACAP permit and TIMS card",
+      ...CORE_INCLUDES,
+      "Lodge accommodation",
+    ],
+    priceExcludes: [
+      ...CORE_EXCLUDES,
+      "Pokhara–Jomsom flight if roads are closed",
+    ],
+    groupSoFar: [
+      { country: "Australia", count: 2 },
+      { country: "Germany", count: 1 },
+      { country: "Spain", count: 1 },
+    ],
+    image: PHOTO.mustang,
+  },
+  {
+    id: "abc-2027-05-10",
+    trekId: "annapurna-base-camp",
+    departsOn: "2027-05-10",
+    seatsTotal: 10,
+    seatsBooked: 4,
+    minimumToRun: 4,
+    guaranteedAt: "2026-08-18",
+    priceUSD: 1290,
+    singleSupplementUSD: 0,
+    priceIncludes: [
+      "ACAP permit and TIMS card",
+      "Pokhara transfers",
+      ...CORE_INCLUDES,
+      "Teahouse accommodation",
+    ],
+    priceExcludes: [...CORE_EXCLUDES, "Meals in Pokhara"],
+    groupSoFar: [
+      { country: "Czechia", count: 2 },
+      { country: "United States", count: 2 },
+    ],
+    image: PHOTO.sanctuary,
   },
 ];
+
+/* ------------------------------------------------------------- composition */
+
+const MONTH_SLUG = [
+  "january",
+  "february",
+  "march",
+  "april",
+  "may",
+  "june",
+  "july",
+  "august",
+  "september",
+  "october",
+  "november",
+  "december",
+];
+
+const addDays = (iso: string, days: number): string => {
+  const date = new Date(`${iso}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+};
+
+function compose(seed: Seed): Departure {
+  const trek = TREKS[seed.trekId];
+  if (!trek) throw new Error(`no trek profile for "${seed.trekId}"`);
+
+  const days = trek.itinerary.length;
+  const departs = new Date(`${seed.departsOn}T00:00:00Z`);
+  const slug = `${seed.trekId}-${MONTH_SLUG[departs.getUTCMonth()]}-${departs.getUTCFullYear()}`;
+
+  return {
+    ...seed,
+    slug,
+    trekName: trek.trekName,
+    region: trek.region,
+    days,
+    maxAltitudeM: trek.maxAltitudeM,
+    difficulty: trek.difficulty,
+    summary: trek.summary,
+    itinerary: trek.itinerary,
+    physicalDemand: trek.physicalDemand,
+    groupSizeMax: trek.groupSizeMax,
+    acclimatisationDays: trek.itinerary
+      .filter((d) => d.isAcclimatisation)
+      .map((d) => d.day),
+    guideRatio: trek.guideRatio,
+    assistantGuideAbove: trek.assistantGuideAbove,
+    // The last night is the night before the last day, so a 12-day trip that
+    // leaves on the 14th comes back on the 25th.
+    returnsOn: addDays(seed.departsOn, days - 1),
+    decisionDate: addDays(seed.departsOn, -DECISION_LEAD_DAYS),
+    costSheetHref: `/departures/${slug}#cost-sheet`,
+  };
+}
+
+export const departures: Departure[] = SEEDS.map(compose);
 
 /* ---------------------------------------------------------------- derived */
 
@@ -345,6 +692,26 @@ export function departureStatus(
   return "needs-n";
 }
 
+/** The highest point reached on a day that is not a travel day. */
+export function itineraryHighPoint(d: Departure): number {
+  return d.itinerary
+    .filter((day) => !day.isTravelDay)
+    .reduce(
+      (high, day) => Math.max(high, day.maxAltitudeM ?? day.sleepAltitudeM),
+      0,
+    );
+}
+
+/** The highest night. The number that governs how someone actually feels. */
+export function highestSleep(d: Departure): ItineraryDay {
+  return d.itinerary.reduce((high, day) =>
+    day.sleepAltitudeM > high.sleepAltitudeM ? day : high,
+  );
+}
+
+export const byId = (id: string) => departures.find((d) => d.id === id);
+export const bySlug = (slug: string) => departures.find((d) => d.slug === slug);
+
 /** "14 Oct — 25 Oct 2026". Never numeric-only: 04/05 is ambiguous worldwide. */
 export function formatDateRange(departsOn: string, returnsOn: string): string {
   const from = new Date(departsOn);
@@ -364,12 +731,8 @@ export function formatDate(iso: string): string {
  * The line under the seat meter.
  *
  * Once a departure is guaranteed, "decided by <date>" is dead weight — the
- * decision has been made. What matters then is that further bookings cannot
- * change it. The decision date only earns its line in the `needs-n` state,
- * where it is the whole point.
- *
- * A pure function so `pnpm check:departures` can assert the rule rather than
- * trusting the component.
+ * decision has been made. The decision date only earns its line in the
+ * `needs-n` state, where it is the whole point.
  */
 export function guaranteeMeta(d: Departure, now: Date = new Date()): string {
   const status = departureStatus(d, now);

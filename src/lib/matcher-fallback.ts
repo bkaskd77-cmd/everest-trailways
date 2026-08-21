@@ -45,7 +45,11 @@ export const TREK_INTENT: Record<string, Intent[]> = {
   "annapurna-circuit": ["challenge", "culture"],
   "langtang-valley": ["quiet", "culture"],
   "upper-mustang": ["culture", "quiet"],
+  "poon-hill": ["culture"],
+  "mardi-himal": ["quiet", "challenge"],
   "chitwan-safari": ["wildlife", "quiet"],
+  "bardia-wildlife": ["wildlife", "quiet"],
+  "kathmandu-valley-rim": ["culture", "quiet"],
 };
 
 /**

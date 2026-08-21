@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "pnpm check:departures && pnpm check:trust && pnpm check:matcher && pnpm check:motion && next build",
+    "build": "pnpm check:departures && pnpm check:trust && pnpm check:matcher && pnpm check:motion && pnpm check:links && next build",
     "perf": "pnpm check:motion && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/measure-perf.ts",
     "start": "next start",
     "lint": "eslint",
@@ -19,7 +19,8 @@
     "check:trust": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-trust.ts",
     "check:departures": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-departures.ts",
     "check:matcher": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-matcher.ts",
-    "check:motion": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-motion.ts"
+    "check:motion": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-motion.ts",
+    "check:links": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-links.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",

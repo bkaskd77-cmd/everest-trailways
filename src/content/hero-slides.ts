@@ -91,7 +91,7 @@ export const heroSlides: HeroSlide[] = [
     },
     focalPoint: "center 45%",
     ctaPrimary: { label: "Plan My Trek", href: "/plan" },
-    ctaSecondary: { label: "Browse Everest treks", href: "/regions/khumbu" },
+    ctaSecondary: { label: "Browse Everest treks", href: "/departures" },
   },
   {
     id: "annapurna",
@@ -105,7 +105,7 @@ export const heroSlides: HeroSlide[] = [
       credit: "Unsplash",
     },
     focalPoint: "center 40%",
-    ctaPrimary: { label: "See fixed departures", href: "/treks" },
+    ctaPrimary: { label: "See fixed departures", href: "/departures" },
     ctaSecondary: { label: "Read the cost sheet", href: "/pricing" },
   },
   {
@@ -118,10 +118,10 @@ export const heroSlides: HeroSlide[] = [
       alt: "Trekkers crossing a broad glacial valley beneath the Langtang range.",
       credit: "Unsplash",
     },
-    ctaPrimary: { label: "Find a short trek", href: "/treks" },
+    ctaPrimary: { label: "Find a short trek", href: "/departures" },
     ctaSecondary: {
       label: "Langtang in seven days",
-      href: "/regions/langtang",
+      href: "/departures",
     },
   },
   {
@@ -136,7 +136,7 @@ export const heroSlides: HeroSlide[] = [
     },
     focalPoint: "center 55%",
     ctaPrimary: { label: "Check permit costs", href: "/pricing" },
-    ctaSecondary: { label: "Mustang itineraries", href: "/regions/mustang" },
+    ctaSecondary: { label: "Mustang itineraries", href: "/departures" },
   },
   {
     id: "chitwan",

@@ -17,9 +17,11 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
+  RETURN_POINTS,
   departures,
   departureStatus,
   guaranteeMeta,
+  itineraryHighPoint,
   seatsRemaining,
   type Departure,
   type DepartureStatus,
@@ -138,27 +140,194 @@ for (const d of departures) {
   }
 }
 
-/* ------------------------------------------------------- section-level rules */
+/* ------------------------------------------------------- itinerary integrity */
 
-if (departures.length < 6) {
+/*
+ * The itinerary is the page's safety claim, so it is checked like one.
+ *
+ * `sleepAltitudeM` is required on every day because it is the number that
+ * governs altitude illness — an itinerary that publishes its peaks and omits
+ * where it sleeps has published the flattering half. The day count has to match
+ * `days` or the page and the card disagree in public. And the advertised
+ * maximum altitude is re-derived from the days themselves, ignoring travel
+ * days, so a trek cannot claim a high point its own itinerary never reaches.
+ */
+for (const d of departures) {
+  const { id } = d;
+
+  if (d.itinerary.length !== d.days) {
+    fail(
+      id,
+      "day-count",
+      `itinerary has ${d.itinerary.length} days but the departure says ${d.days}`,
+    );
+  }
+
+  d.itinerary.forEach((day, index) => {
+    if (day.day !== index + 1) {
+      fail(id, "day-numbering", `day ${index + 1} is numbered ${day.day}`);
+    }
+    if (typeof day.sleepAltitudeM !== "number") {
+      fail(
+        id,
+        "missing-sleep-altitude",
+        `day ${day.day} has no sleepAltitudeM`,
+      );
+    }
+    if (
+      day.maxAltitudeM !== undefined &&
+      day.maxAltitudeM < day.sleepAltitudeM
+    ) {
+      fail(
+        id,
+        "impossible-day",
+        `day ${day.day} tops out at ${day.maxAltitudeM} m but sleeps at ${day.sleepAltitudeM} m`,
+      );
+    }
+    if (!day.meals.length) {
+      fail(id, "no-meals", `day ${day.day} lists no meals`);
+    }
+    if (!day.toPlace.trim()) {
+      fail(id, "no-destination", `day ${day.day} has no toPlace`);
+    }
+  });
+
+  const derivedMax = itineraryHighPoint(d);
+  if (derivedMax !== d.maxAltitudeM) {
+    fail(
+      id,
+      "altitude-contradiction",
+      `advertised max is ${d.maxAltitudeM} m but the itinerary reaches ${derivedMax} m on its walking days`,
+    );
+  }
+
+  const last = d.itinerary[d.itinerary.length - 1];
+  if (last && !RETURN_POINTS.some((place) => last.toPlace.includes(place))) {
+    fail(
+      id,
+      "no-return",
+      `the last day ends at "${last.toPlace}", which is not one of ${RETURN_POINTS.join(" or ")}`,
+    );
+  }
+
+  const marked = d.itinerary
+    .filter((day) => day.isAcclimatisation)
+    .map((day) => day.day);
+  if (marked.join(",") !== d.acclimatisationDays.join(",")) {
+    fail(
+      id,
+      "acclimatisation-drift",
+      `acclimatisationDays is [${d.acclimatisationDays}] but the itinerary marks [${marked}]`,
+    );
+  }
+
+  if (!d.summary.trim()) fail(id, "no-summary", "summary is empty");
+  if (!d.slug.trim() || !/^[a-z0-9-]+$/.test(d.slug)) {
+    fail(id, "bad-slug", `slug "${d.slug}" is not kebab-case`);
+  }
+  if (d.groupSizeMax < d.seatsTotal) {
+    fail(
+      id,
+      "group-cap",
+      `groupSizeMax ${d.groupSizeMax} is below seatsTotal ${d.seatsTotal}`,
+    );
+  }
+}
+
+const slugs = new Set<string>();
+for (const d of departures) {
+  if (slugs.has(d.slug)) {
+    fail(d.id, "duplicate-slug", `two departures share the slug "${d.slug}"`);
+  }
+  slugs.add(d.slug);
+}
+
+/* ------------------------------------------------------------ coverage rules */
+
+/*
+ * The matcher is only as good as the inventory behind it. With six departures
+ * it returned an empty list for most honest answers — one sub-3,000 m date and
+ * one October date is not a catalogue, it is a demo. These are the floors that
+ * keep it able to answer.
+ */
+const lowAltitude = departures.filter((d) => d.maxAltitudeM < 3000);
+if (lowAltitude.length < 4) {
   fail(
     "section",
-    "too-few",
-    `${departures.length} departures — the grid expects at least 6`,
+    "coverage",
+    `only ${lowAltitude.length} departures under 3,000 m — at least 4 are needed for the matcher to answer a stated low ceiling`,
   );
 }
 
-// October and November are Nepal's busiest months. A visible set without them
-// is not representative of what is actually on sale.
-const peakMonths = departures.filter((d) => {
+const autumn = departures.filter((d) => {
   const month = new Date(d.departsOn).getUTCMonth();
   return month === 9 || month === 10;
 });
-if (peakMonths.length < 2) {
+if (autumn.length < 4) {
   fail(
     "section",
-    "missing-peak",
-    `only ${peakMonths.length} departure(s) fall in Oct or Nov — the busiest months must be represented`,
+    "coverage",
+    `only ${autumn.length} departures in October or November — the two busiest months need at least 4`,
+  );
+}
+
+const shortTreks = new Set(
+  departures.filter((d) => d.days <= 7).map((d) => d.trekId),
+);
+if (shortTreks.size < 3) {
+  fail(
+    "section",
+    "coverage",
+    `only ${shortTreks.size} distinct treks of 7 days or fewer — at least 3 are needed`,
+  );
+}
+
+const REQUIRED_MONTHS = [
+  "2026-09",
+  "2026-10",
+  "2026-11",
+  "2026-12",
+  "2027-01",
+  "2027-02",
+  "2027-03",
+  "2027-04",
+  "2027-05",
+];
+const present = new Set(departures.map((d) => d.departsOn.slice(0, 7)));
+for (const month of REQUIRED_MONTHS) {
+  if (!present.has(month)) {
+    fail("section", "coverage", `no departure in ${month}`);
+  }
+}
+
+const states = new Set(departures.map((d) => departureStatus(d, now)));
+if (states.size < 3) {
+  fail(
+    "section",
+    "coverage",
+    `only ${states.size} distinct fill states across the whole set — the grid should show a spread`,
+  );
+}
+if (!states.has("full")) {
+  fail(
+    "section",
+    "coverage",
+    "no departure is full — at least one should be, or the seat meter never shows its own end state",
+  );
+}
+
+const trekCount = new Set(departures.map((d) => d.trekId)).size;
+if (trekCount < 8) {
+  fail("section", "coverage", `only ${trekCount} distinct treks — at least 8`);
+}
+
+/* ------------------------------------------------------- section-level rules */
+
+if (departures.length < 16) {
+  fail(
+    "section",
+    "too-few",
+    `${departures.length} departures — the matcher needs at least 16 to have answers`,
   );
 }
 

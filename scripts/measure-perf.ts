@@ -31,11 +31,37 @@ import path from "node:path";
 
 import puppeteer, { type Browser, type Page } from "puppeteer";
 
+import { departures } from "../src/content/departures.ts";
+
 type Viewport = { name: string; width: number; height: number };
 
 const VIEWPORTS: Viewport[] = [
   { name: "desktop 1440", width: 1440, height: 900 },
   { name: "mobile 390", width: 390, height: 844 },
+];
+
+/**
+ * The pages worth measuring.
+ *
+ * The homepage because it is the one everybody lands on, and a departure
+ * detail page because it is the longest document on the site — an itinerary
+ * accordion, an animated SVG profile and a sticky bar that enters on scroll are
+ * three separate chances to shift the layout after paint. `answersMatcher`
+ * marks the one page that has a matcher to answer; the departure page does not,
+ * and asking it to would fail rather than measure.
+ */
+const longest = departures.reduce((a, b) => (b.days > a.days ? b : a));
+
+const PAGES: { name: string; path: string; answersMatcher: boolean }[] = [
+  { name: "homepage", path: "/", answersMatcher: true },
+  {
+    // The longest itinerary on sale, not the first in the array: the point of
+    // measuring a departure page is the worst case, and a four-day itinerary
+    // does not have one.
+    name: `departure /${longest.slug}`,
+    path: `/departures/${longest.slug}`,
+    answersMatcher: false,
+  },
 ];
 
 /** Fails the run. Properties of the build, identical on any machine. */
@@ -122,7 +148,11 @@ type Metrics = {
   lcpElement: string | null;
 };
 
-async function measure(page: Page, url: string): Promise<Metrics> {
+async function measure(
+  page: Page,
+  url: string,
+  answersMatcher: boolean,
+): Promise<Metrics> {
   // Installed before any navigation so the observers catch the first paint.
   await page.evaluateOnNewDocument(() => {
     const w = window as unknown as Record<string, unknown>;
@@ -191,15 +221,27 @@ async function measure(page: Page, url: string): Promise<Metrics> {
   // match cards inside a panel that is already on screen, which is the largest
   // layout change the page can make after load — exactly the shift worth
   // catching.
-  await page.evaluate(async () => {
-    const option = [...document.querySelectorAll("button")].find((b) =>
-      /Eight to twelve days/.test(b.textContent ?? ""),
-    );
-    if (!option)
-      throw new Error("the matcher's first question is not on screen");
-    option.click();
-    await new Promise((r) => setTimeout(r, 2500));
-  });
+  if (answersMatcher) {
+    await page.evaluate(async () => {
+      const option = [...document.querySelectorAll("button")].find((b) =>
+        /Eight to twelve days/.test(b.textContent ?? ""),
+      );
+      if (!option)
+        throw new Error("the matcher's first question is not on screen");
+      option.click();
+      await new Promise((r) => setTimeout(r, 2500));
+    });
+  } else {
+    // The equivalent largest post-load layout change on a departure page:
+    // open every itinerary day at once.
+    await page.evaluate(async () => {
+      const expand = [...document.querySelectorAll("button")].find((b) =>
+        /Expand all/i.test(b.textContent ?? ""),
+      );
+      expand?.click();
+      await new Promise((r) => setTimeout(r, 2500));
+    });
+  }
 
   const after = await page.evaluate(() => {
     const w = window as unknown as Record<string, unknown>;
@@ -269,51 +311,57 @@ try {
 
   console.log(`\n  Performance — production build on port ${port}\n`);
 
-  for (const viewport of VIEWPORTS) {
-    const page = await browser.newPage();
-    await page.setViewport({
-      width: viewport.width,
-      height: viewport.height,
-      deviceScaleFactor: 1,
-      isMobile: viewport.width < 768,
-      hasTouch: viewport.width < 768,
-    });
+  for (const target of PAGES) {
+    for (const viewport of VIEWPORTS) {
+      const page = await browser.newPage();
+      await page.setViewport({
+        width: viewport.width,
+        height: viewport.height,
+        deviceScaleFactor: 1,
+        isMobile: viewport.width < 768,
+        hasTouch: viewport.width < 768,
+      });
 
-    const m = await measure(page, `http://127.0.0.1:${port}/`);
-    await page.close();
+      const m = await measure(
+        page,
+        `http://127.0.0.1:${port}${target.path}`,
+        target.answersMatcher,
+      );
+      await page.close();
 
-    const mark = (ok: boolean) => (ok ? "ok  " : "FAIL");
-    console.log(`  ${viewport.name}`);
-    console.log(
-      `    ${mark(m.clsAfterInteraction <= ENFORCED.cls)} CLS            ${m.clsAfterInteraction.toFixed(4)}  (first paint ${m.clsInitial.toFixed(4)}, ceiling ${ENFORCED.cls})`,
-    );
-    console.log(
-      `    ${mark(m.jsKB <= ENFORCED.jsKB)} JS transferred ${String(m.jsKB).padStart(4)} KB  (ceiling ${ENFORCED.jsKB} KB)`,
-    );
-    console.log(
-      `    ${mark(m.domNodes <= ENFORCED.domNodes)} DOM nodes      ${String(m.domNodes).padStart(4)}     (ceiling ${ENFORCED.domNodes})`,
-    );
-    console.log(
-      `    ..   LCP            ${m.lcpMs === null ? "unmeasured" : `${m.lcpMs} ms`}  (target ${REPORTED.lcpMs} ms) — ${m.lcpElement ?? "no element"}`,
-    );
-    console.log(
-      `    ..   TBT            ${m.tbtMs} ms  (target ${REPORTED.tbtMs} ms, load-dependent)\n`,
-    );
+      const mark = (ok: boolean) => (ok ? "ok  " : "FAIL");
+      console.log(`  ${target.name} — ${viewport.name}`);
+      console.log(
+        `    ${mark(m.clsAfterInteraction <= ENFORCED.cls)} CLS            ${m.clsAfterInteraction.toFixed(4)}  (first paint ${m.clsInitial.toFixed(4)}, ceiling ${ENFORCED.cls})`,
+      );
+      console.log(
+        `    ${mark(m.jsKB <= ENFORCED.jsKB)} JS transferred ${String(m.jsKB).padStart(4)} KB  (ceiling ${ENFORCED.jsKB} KB)`,
+      );
+      console.log(
+        `    ${mark(m.domNodes <= ENFORCED.domNodes)} DOM nodes      ${String(m.domNodes).padStart(4)}     (ceiling ${ENFORCED.domNodes})`,
+      );
+      console.log(
+        `    ..   LCP            ${m.lcpMs === null ? "unmeasured" : `${m.lcpMs} ms`}  (target ${REPORTED.lcpMs} ms) — ${m.lcpElement ?? "no element"}`,
+      );
+      console.log(
+        `    ..   TBT            ${m.tbtMs} ms  (target ${REPORTED.tbtMs} ms, load-dependent)\n`,
+      );
 
-    if (m.clsAfterInteraction > ENFORCED.cls) {
-      problems.push(
-        `${viewport.name}: CLS ${m.clsAfterInteraction.toFixed(4)} over ${ENFORCED.cls}`,
-      );
-    }
-    if (m.jsKB > ENFORCED.jsKB) {
-      problems.push(
-        `${viewport.name}: ${m.jsKB} KB of JS over ${ENFORCED.jsKB} KB`,
-      );
-    }
-    if (m.domNodes > ENFORCED.domNodes) {
-      problems.push(
-        `${viewport.name}: ${m.domNodes} DOM nodes over ${ENFORCED.domNodes}`,
-      );
+      if (m.clsAfterInteraction > ENFORCED.cls) {
+        problems.push(
+          `${target.name} ${viewport.name}: CLS ${m.clsAfterInteraction.toFixed(4)} over ${ENFORCED.cls}`,
+        );
+      }
+      if (m.jsKB > ENFORCED.jsKB) {
+        problems.push(
+          `${target.name} ${viewport.name}: ${m.jsKB} KB of JS over ${ENFORCED.jsKB} KB`,
+        );
+      }
+      if (m.domNodes > ENFORCED.domNodes) {
+        problems.push(
+          `${target.name} ${viewport.name}: ${m.domNodes} DOM nodes over ${ENFORCED.domNodes}`,
+        );
+      }
     }
   }
 

@@ -221,14 +221,14 @@ export function DepartureCard({
       <div className={cn(PAD, "flex flex-wrap items-center gap-3 pt-4")}>
         {inactive ? (
           <Button asChild variant="outline" size="sm">
-            <Link href={`/departures/${departure.id}/waitlist`}>
+            <Link href={`/departures/${departure.slug}`}>
               Join the waitlist
             </Link>
           </Button>
         ) : (
           <>
             <Button asChild size="sm">
-              <Link href={`/departures/${departure.id}`}>View departure</Link>
+              <Link href={`/departures/${departure.slug}`}>View departure</Link>
             </Button>
             <Link
               href={departure.costSheetHref}

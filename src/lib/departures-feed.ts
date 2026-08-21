@@ -1,8 +1,10 @@
 // Relative with an explicit extension, not the `@/` alias: scripts/ runs this
 // module through Node's bare TypeScript stripping, which has no path mapping.
 import {
-  departures,
   departureStatus,
+  departures,
+  formatDate,
+  highestSleep,
   seatsRemaining,
   seatsToGuarantee,
 } from "../content/departures.ts";
@@ -130,11 +132,21 @@ export function buildFeed(origin: string) {
 }
 
 /** schema.org TouristTrip + Offer for one departure. */
+/**
+ * The full structured record for one departure page.
+ *
+ * The itinerary is an ItemList of TouristDestination entries carrying the
+ * sleeping altitude of each night, because that is the fact a machine would
+ * otherwise have to read off an SVG polyline — which it cannot. Everything
+ * here also exists as literal text on the page; this is a second copy in a
+ * shape a parser can use, never the only copy.
+ */
 export function departureJsonLd(
   d: (typeof departures)[number],
   origin: string,
 ) {
   const absolute = (path: string) => new URL(path, origin).toString();
+  const url = absolute(`/departures/${d.slug}`);
   const status = departureStatus(d);
   const availability =
     status === "full" || status === "closed"
@@ -144,34 +156,48 @@ export function departureJsonLd(
   return {
     "@context": "https://schema.org",
     "@type": "TouristTrip",
-    "@id": absolute(`/departures/${d.id}`),
+    "@id": url,
     name: `${d.trekName} — departs ${d.departsOn}`,
-    description: `${d.days}-day ${d.difficulty} trek in ${d.region}, Nepal. Maximum altitude ${d.maxAltitudeM} m. Guide ratio ${d.guideRatio}. Guaranteed to run at ${d.minimumToRun} bookings; run or no-run decided by ${d.decisionDate}.`,
-    url: absolute(`/departures/${d.id}`),
+    description: `${d.days}-day ${d.difficulty} trek in ${d.region}, Nepal. Maximum altitude ${d.maxAltitudeM} m, highest night ${highestSleep(d).sleepAltitudeM} m. Guide ratio ${d.guideRatio}, maximum group ${d.groupSizeMax}. Guaranteed to run at ${d.minimumToRun} bookings; run or no-run decided by ${d.decisionDate}.`,
+    url,
     touristType: "Trekker",
+    subjectOf: {
+      "@type": "CreativeWork",
+      name: "Published cost sheet",
+      url: absolute(d.costSheetHref),
+    },
     itinerary: {
       "@type": "ItemList",
-      numberOfItems: 2,
-      itemListElement: [
-        {
-          "@type": "ListItem",
-          position: 1,
-          item: { "@type": "Place", name: "Kathmandu, Nepal" },
+      name: `${d.trekName} day-by-day itinerary`,
+      numberOfItems: d.itinerary.length,
+      itemListElement: d.itinerary.map((day) => ({
+        "@type": "ListItem",
+        position: day.day,
+        item: {
+          "@type": "TouristDestination",
+          name: day.toPlace,
+          description: day.title,
+          // The sleeping altitude, not the day's peak. See treks.ts.
+          geo: {
+            "@type": "GeoCoordinates",
+            elevation: `${day.sleepAltitudeM} m`,
+            addressCountry: "NP",
+          },
         },
-        {
-          "@type": "ListItem",
-          position: 2,
-          item: { "@type": "Place", name: `${d.region}, Nepal` },
-        },
-      ],
+      })),
     },
     offers: {
       "@type": "Offer",
-      "@id": absolute(`/departures/${d.id}#offer`),
+      "@id": `${url}#offer`,
       price: d.priceUSD.toFixed(2),
       priceCurrency: "USD",
       availability,
-      url: absolute(`/departures/${d.id}`),
+      inventoryLevel: {
+        "@type": "QuantitativeValue",
+        value: seatsRemaining(d),
+        unitText: "seats",
+      },
+      url,
       validFrom: d.guaranteedAt ?? d.decisionDate,
       validThrough: d.departsOn,
       priceSpecification: {
@@ -186,5 +212,32 @@ export function departureJsonLd(
       name: "Everest Trailways",
       url: origin,
     },
+  };
+}
+
+/** Breadcrumbs for the detail page. Home / Departures / this departure. */
+export function breadcrumbJsonLd(
+  d: (typeof departures)[number],
+  origin: string,
+) {
+  const absolute = (path: string) => new URL(path, origin).toString();
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: origin },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Departures",
+        item: absolute("/departures"),
+      },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: `${d.trekName}, ${formatDate(d.departsOn)}`,
+        item: absolute(`/departures/${d.slug}`),
+      },
+    ],
   };
 }
