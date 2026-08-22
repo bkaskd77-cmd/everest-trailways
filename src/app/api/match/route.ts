@@ -14,33 +14,61 @@ import {
   MAX_OUTPUT_TOKENS,
   MAX_QUESTIONS,
   buildSystemPrompt,
+  fenceUserText,
 } from "@/lib/matcher-prompt";
 import {
-  coerceResult,
   extractMessage,
   parseMatcherJson,
+  validateResult,
   type MatcherFrame,
   type MatcherResult,
   type MatchTurn,
 } from "@/lib/matcher-types";
-import { MATCH_RATE_LIMIT, clientKey, rateLimit } from "@/lib/rate-limit";
+import {
+  MATCH_IP_LIMIT,
+  MATCH_SESSION_LIMIT,
+  checkLimit,
+  clientKey,
+  hashKey,
+  logSecurityEvent,
+  originAllowed,
+} from "@/lib/rate-limit";
+import {
+  LIMITS,
+  cleanModelText,
+  cleanUserText,
+  echoesUserText,
+} from "@/lib/sanitise";
+import { siteConfig } from "@/lib/site";
+import { maySpend, recordSpend } from "@/lib/spend";
 
 /**
  * The matcher endpoint.
  *
- * Three properties matter more than the happy path:
+ * This is the only place on the site where an anonymous stranger can cause us
+ * to spend money, and the only place where their words reach a language model.
+ * Both of those are treated as adversarial by default.
  *
- *   1. It is rate limited per IP. A public endpoint that calls a paid API is a
- *      bill waiting to be run up, and the section is not worth that risk.
- *   2. It never trusts the model's output. Ids are checked against the dataset,
- *      the shape is coerced rather than cast, and unparseable output falls
- *      through to the deterministic matcher.
- *   3. It never fails visibly. Missing key, dead API, malformed JSON — every
- *      one of those ends in a real answer from `fallbackMatch`, because a
- *      broken panel on this page costs more than a slightly duller one.
+ * WHAT STOPS THE BILL
+ *   - a durable per-IP and per-session sliding window, shared across instances
+ *   - a global daily token ceiling for the whole endpoint, which fails CLOSED:
+ *     if we cannot count what we are spending, we do not spend
+ *   - a hard input-size limit applied before any model call
+ *   - a capped max_tokens on the call itself
+ *   - an Origin check, as depth rather than as a control
+ *
+ * WHAT STOPS THE MODEL BEING TURNED AGAINST THE PAGE
+ *   - user text is sanitised, then fenced, and the fence is made of characters
+ *     the sanitiser removes, so it cannot be closed from inside
+ *   - the response is validated against a closed schema: one unknown field, one
+ *     unknown departure id, one echoed run of the user's own words, and the
+ *     entire answer is discarded for the deterministic matcher
+ *   - every string that survives is stripped of markup before it is rendered
  *
  * Nothing is written down. No database, no logging of message bodies, no
- * analytics on what people type. The UI says so; this is where it is true.
+ * analytics on what people type. Security events log a hashed key and a reason,
+ * never an address and never a word anyone wrote. The UI promises this; this is
+ * where it is true.
  */
 
 export const runtime = "nodejs";
@@ -50,14 +78,68 @@ const MAX_TURNS = 24;
 const MAX_TURN_CHARS = 1_500;
 const MAX_TRANSCRIPT_CHARS = 10_000;
 
+/**
+ * The hard ceiling on a request body, checked before it is parsed.
+ *
+ * The per-turn and per-transcript limits below trim a normal conversation to
+ * size. This one exists for the request that is not a conversation at all — a
+ * megabyte of text aimed at making us pay to tokenise it. Refused with a 413
+ * before `json()` allocates it.
+ */
+const MAX_BODY_BYTES = 32 * 1024;
+
 const VALID_IDS = departures.map((d) => d.id);
 const INTENTS: Intent[] = ["challenge", "culture", "wildlife", "quiet"];
+
+/** Set on the first request and read on the rest. Not an identity, just a bucket. */
+const SESSION_COOKIE = "etw_match";
 
 type Body = {
   turns?: unknown;
   answers?: unknown;
   scope?: unknown;
 };
+
+function json(
+  body: unknown,
+  status: number,
+  extra: HeadersInit = {},
+): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json", ...extra },
+  });
+}
+
+/**
+ * The session bucket.
+ *
+ * A random value in an httpOnly cookie. It is not trusted for anything — a
+ * caller who clears it simply falls back to the per-IP window, which is applied
+ * regardless. Its only job is to stop one browser inside a large shared network
+ * from consuming everybody else's allowance on that address.
+ */
+function sessionKey(request: Request): { key: string; issued: string | null } {
+  const cookie = request.headers.get("cookie") ?? "";
+  const found = cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${SESSION_COOKIE}=`));
+
+  if (found) {
+    const value = found.slice(SESSION_COOKIE.length + 1);
+    if (/^[A-Za-z0-9_-]{8,64}$/.test(value))
+      return { key: value, issued: null };
+  }
+  const fresh = crypto.randomUUID().replace(/-/g, "");
+  return { key: fresh, issued: fresh };
+}
+
+function sessionCookieHeader(value: string): string {
+  return `${SESSION_COOKIE}=${value}; Path=/api/match; HttpOnly; SameSite=Strict; Max-Age=3600${
+    process.env.NODE_ENV === "production" ? "; Secure" : ""
+  }`;
+}
 
 function sanitiseTurns(value: unknown): MatchTurn[] {
   if (!Array.isArray(value)) return [];
@@ -67,9 +149,11 @@ function sanitiseTurns(value: unknown): MatchTurn[] {
     if (!entry || typeof entry !== "object") continue;
     const row = entry as Record<string, unknown>;
     const role = row.role === "assistant" ? "assistant" : "user";
+    // Markup, control characters and invisible direction marks come out here,
+    // which is also what makes the fence in the prompt uncloseable.
     const content =
       typeof row.content === "string"
-        ? row.content.slice(0, MAX_TURN_CHARS).trim()
+        ? cleanUserText(row.content, MAX_TURN_CHARS)
         : "";
     if (!content) continue;
     total += content.length;
@@ -147,7 +231,7 @@ function sanitiseScope(
   if (!VALID_IDS.includes(departureId)) return undefined;
   const questionId =
     typeof row.questionId === "string"
-      ? row.questionId.slice(0, 40)
+      ? row.questionId.replace(/[^a-z0-9-]/gi, "").slice(0, 40)
       : undefined;
   return { departureId, questionId };
 }
@@ -177,30 +261,80 @@ function fallbackFor(
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const verdict = rateLimit(clientKey(request.headers), MATCH_RATE_LIMIT);
-  if (!verdict.ok) {
-    return new Response(
-      JSON.stringify({
-        error: "Too many requests. Give it a minute, or message us directly.",
-      }),
-      {
-        status: 429,
-        headers: {
-          "content-type": "application/json",
-          "retry-after": String(verdict.retryAfterSeconds),
-        },
-      },
+  const ip = clientKey(request.headers);
+  const who = hashKey(ip);
+  const { key: session, issued } = sessionKey(request);
+  const setCookie: Record<string, string> = issued
+    ? { "set-cookie": sessionCookieHeader(issued) }
+    : {};
+
+  /* --------------------------------------------------------- origin check */
+
+  if (!originAllowed(request, siteConfig.url)) {
+    logSecurityEvent({ evt: "origin.reject", scope: "match", who });
+    return json({ error: "Not allowed from this origin." }, 403);
+  }
+
+  /* ------------------------------------------------------------ body size */
+
+  const declared = Number(request.headers.get("content-length") ?? "0");
+  if (declared > MAX_BODY_BYTES) {
+    logSecurityEvent({
+      evt: "input.oversize",
+      scope: "match",
+      who,
+      detail: `${declared}b`,
+    });
+    return json({ error: "That message is too long." }, 413);
+  }
+
+  /* --------------------------------------------------------- rate limits */
+
+  const [byIp, bySession] = await Promise.all([
+    checkLimit("match:ip", ip, MATCH_IP_LIMIT),
+    checkLimit("match:session", session, MATCH_SESSION_LIMIT),
+  ]);
+  const blocked = !byIp.ok ? byIp : !bySession.ok ? bySession : null;
+
+  if (blocked) {
+    logSecurityEvent({
+      evt: "ratelimit.block",
+      scope: !byIp.ok ? "match:ip" : "match:session",
+      who,
+      layer: blocked.layer,
+    });
+    return json(
+      { error: "Too many requests. Give it a minute, or message us directly." },
+      429,
+      { "retry-after": String(blocked.retryAfterSeconds), ...setCookie },
     );
+  }
+
+  /* ------------------------------------------------------------- the body */
+
+  let raw: string;
+  try {
+    raw = await request.text();
+  } catch {
+    return json({ error: "Malformed request." }, 400, setCookie);
+  }
+
+  // Checked again on the real bytes: `content-length` is a claim, not a fact.
+  if (raw.length > MAX_BODY_BYTES) {
+    logSecurityEvent({
+      evt: "input.oversize",
+      scope: "match",
+      who,
+      detail: `${raw.length}b`,
+    });
+    return json({ error: "That message is too long." }, 413, setCookie);
   }
 
   let body: Body;
   try {
-    body = (await request.json()) as Body;
+    body = JSON.parse(raw) as Body;
   } catch {
-    return new Response(JSON.stringify({ error: "Malformed request." }), {
-      status: 400,
-      headers: { "content-type": "application/json" },
-    });
+    return json({ error: "Malformed request." }, 400, setCookie);
   }
 
   const turns = sanitiseTurns(body.turns);
@@ -208,13 +342,11 @@ export async function POST(request: Request): Promise<Response> {
   const scope = sanitiseScope(body.scope);
 
   if (turns.length === 0) {
-    return new Response(JSON.stringify({ error: "Nothing to answer." }), {
-      status: 400,
-      headers: { "content-type": "application/json" },
-    });
+    return json({ error: "Nothing to answer." }, 400, setCookie);
   }
 
   const encoder = new TextEncoder();
+  const userText = turns.filter((t) => t.role === "user").map((t) => t.content);
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -228,6 +360,20 @@ export async function POST(request: Request): Promise<Response> {
 
       const apiKey = process.env.ANTHROPIC_API_KEY;
       if (!apiKey) {
+        finishWithFallback();
+        return;
+      }
+
+      /* ------------------------------------------- the global spend ceiling */
+
+      const spend = await maySpend();
+      if (!spend.allowed) {
+        logSecurityEvent({
+          evt: "spend.withheld",
+          scope: "match",
+          who,
+          detail: spend.reason,
+        });
         finishWithFallback();
         return;
       }
@@ -248,8 +394,8 @@ export async function POST(request: Request): Promise<Response> {
         const anthropicStream = client.messages.stream({
           model: MATCHER_MODEL,
           max_tokens: MAX_OUTPUT_TOKENS,
-          // A short classification over six rows behind a streaming UI: latency
-          // is worth more than depth here.
+          // A short classification over a small dataset behind a streaming UI:
+          // latency is worth more than depth here.
           thinking: { type: "disabled" },
           output_config: { effort: "low" },
           system: [
@@ -262,10 +408,15 @@ export async function POST(request: Request): Promise<Response> {
               cache_control: { type: "ephemeral" },
             },
           ],
-          messages: turns.map((t) => ({ role: t.role, content: t.content })),
+          messages: turns.map((t) => ({
+            role: t.role,
+            // Only the person's words are fenced. The assistant's own previous
+            // turns are ours and are not untrusted input.
+            content: t.role === "user" ? fenceUserText(t.content) : t.content,
+          })),
         });
 
-        let raw = "";
+        let buffer = "";
         let emitted = "";
 
         for await (const event of anthropicStream) {
@@ -273,8 +424,13 @@ export async function POST(request: Request): Promise<Response> {
             event.type === "content_block_delta" &&
             event.delta.type === "text_delta"
           ) {
-            raw += event.delta.text;
-            const message = extractMessage(raw);
+            buffer += event.delta.text;
+            // Streamed prose is cleaned on the way out too, so a partial
+            // message is never rendered less safely than a complete one.
+            const message = cleanModelText(
+              extractMessage(buffer),
+              LIMITS.message,
+            );
             if (message.length > emitted.length) {
               send({ t: "delta", v: message.slice(emitted.length) });
               emitted = message;
@@ -282,25 +438,39 @@ export async function POST(request: Request): Promise<Response> {
           }
         }
 
-        const parsed = parseMatcherJson(raw);
-        // The altitude ceiling, the days and the window are enforced here
-        // rather than trusted to the model: whatever it puts in `matches`, a
-        // departure that breaks one of them is moved to `beyond`.
-        const result = parsed
-          ? coerceResult(parsed, {
+        const final = await anthropicStream.finalMessage().catch(() => null);
+        await recordSpend(final?.usage);
+
+        const parsed = parseMatcherJson(buffer);
+        const outcome = parsed
+          ? validateResult(parsed, {
               validIds: VALID_IDS,
               maxMatches: MAX_MATCHES,
               breach: (id) => {
                 const departure = departures.find((d) => d.id === id);
                 return departure ? hardBreach(departure, answers) : null;
               },
+              userText,
+              clean: cleanModelText,
+              limits: LIMITS,
+              echoes: echoesUserText,
             })
           : null;
 
-        send({
-          t: "result",
-          result: result ?? fallbackFor(answers, scope),
-        });
+        if (!outcome || !outcome.ok) {
+          // The model produced something that does not hold up. The whole
+          // answer goes, not the offending part of it.
+          logSecurityEvent({
+            evt: "output.rejected",
+            scope: "match",
+            who,
+            detail: outcome ? outcome.why : "unparseable",
+          });
+          finishWithFallback();
+          return;
+        }
+
+        send({ t: "result", result: outcome.result });
         controller.close();
       } catch {
         // Deliberately no detail on the wire and nothing logged from the body:
@@ -319,6 +489,7 @@ export async function POST(request: Request): Promise<Response> {
       "content-type": "application/x-ndjson; charset=utf-8",
       "cache-control": "no-store",
       "x-accel-buffering": "no",
+      ...setCookie,
     },
   });
 }

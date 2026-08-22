@@ -6,6 +6,7 @@ import { Reveal } from "@/components/motion";
 import { departures } from "@/content/departures";
 import { departureJsonLd } from "@/lib/departures-feed";
 import { siteConfig } from "@/lib/site";
+import { JsonLd } from "@/components/json-ld";
 
 /** How many dates the homepage shows. The rest live on `/departures`. */
 const FEATURED_COUNT = 6;
@@ -55,11 +56,7 @@ export function FeaturedDepartures() {
       aria-labelledby="departures-heading"
       className="bg-band-sunk text-foreground"
     >
-      <script
-        type="application/ld+json"
-        // Server-rendered, from our own data — no user input reaches this.
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      <JsonLd data={jsonLd} />
 
       <div className="shell pt-4 pb-24 lg:pb-28">
         {/* Two columns sharing the page's left spine. Nothing is centred: the

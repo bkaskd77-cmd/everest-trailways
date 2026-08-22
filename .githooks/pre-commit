@@ -1,0 +1,11 @@
+#!/bin/sh
+#
+# Blocks a commit that contains anything shaped like a credential.
+#
+# Enabled by `pnpm install` (the `prepare` script points core.hooksPath here),
+# so a fresh clone gets it without anyone remembering to run a setup step.
+#
+# To bypass in a genuine emergency: git commit --no-verify. If you do that
+# because the scanner is wrong, fix the pattern in scripts/scan-secrets.ts
+# afterwards. If you do it because the scanner is right, rotate the key.
+node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/scan-secrets.ts --staged

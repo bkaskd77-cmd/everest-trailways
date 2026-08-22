@@ -9,28 +9,28 @@ importers:
   .:
     dependencies:
       '@anthropic-ai/sdk':
-        specifier: ^0.117.1
+        specifier: 0.117.1
         version: 0.117.1(zod@4.4.3)
       class-variance-authority:
-        specifier: ^0.7.1
+        specifier: 0.7.1
         version: 0.7.1
       clsx:
-        specifier: ^2.1.1
+        specifier: 2.1.1
         version: 2.1.1
       lucide-react:
-        specifier: ^1.31.0
+        specifier: 1.31.0
         version: 1.31.0(react@19.2.8)
       motion:
-        specifier: ^13.1.0
+        specifier: 13.1.0
         version: 13.1.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       next:
         specifier: 16.3.1
         version: 16.3.1(@babel/core@7.29.7(supports-color@7.2.0))(@types/node@20.19.43)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       next-themes:
-        specifier: ^0.4.6
+        specifier: 0.4.6
         version: 0.4.6(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       radix-ui:
-        specifier: ^1.6.7
+        specifier: 1.6.7
         version: 1.6.7(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react:
         specifier: 19.2.8
@@ -39,50 +39,50 @@ importers:
         specifier: 19.2.8
         version: 19.2.8(react@19.2.8)
       tailwind-merge:
-        specifier: ^3.6.0
+        specifier: 3.6.0
         version: 3.6.0
       tw-animate-css:
-        specifier: ^1.4.0
+        specifier: 1.4.0
         version: 1.4.0
     devDependencies:
       '@tailwindcss/postcss':
-        specifier: ^4
+        specifier: 4.3.3
         version: 4.3.3
       '@types/node':
-        specifier: ^20
+        specifier: 20.19.43
         version: 20.19.43
       '@types/react':
-        specifier: ^19
+        specifier: 19.2.18
         version: 19.2.18
       '@types/react-dom':
-        specifier: ^19
+        specifier: 19.2.4
         version: 19.2.4(@types/react@19.2.18)
       eslint:
-        specifier: ^9
+        specifier: 9.39.5
         version: 9.39.5(jiti@2.7.0)(supports-color@7.2.0)
       eslint-config-next:
         specifier: 16.3.1
         version: 16.3.1(@typescript-eslint/parser@8.67.0(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.9.3))(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.9.3)
       eslint-config-prettier:
-        specifier: ^10.1.8
+        specifier: 10.1.8
         version: 10.1.8(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))
       jpeg-js:
-        specifier: ^0.4.4
+        specifier: 0.4.4
         version: 0.4.4
       prettier:
-        specifier: ^3.9.6
+        specifier: 3.9.6
         version: 3.9.6
       prettier-plugin-tailwindcss:
-        specifier: ^0.8.1
+        specifier: 0.8.1
         version: 0.8.1(prettier@3.9.6)
       puppeteer:
-        specifier: ^25.7.0
+        specifier: 25.7.0
         version: 25.7.0
       tailwindcss:
-        specifier: ^4
+        specifier: 4.3.3
         version: 4.3.3
       typescript:
-        specifier: ^5
+        specifier: 5.9.3
         version: 5.9.3
 
 packages:

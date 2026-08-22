@@ -25,6 +25,7 @@ import { breadcrumbJsonLd, departureJsonLd } from "@/lib/departures-feed";
 import { textShadowCss } from "@/lib/hero-scrim";
 import { siteConfig } from "@/lib/site";
 import { cn } from "@/lib/utils";
+import { JsonLd } from "@/components/json-ld";
 
 /**
  * One departure, in full.
@@ -95,15 +96,11 @@ export default async function DeparturePage({
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        // Server-rendered from our own data; no user input reaches this.
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify([
-            departureJsonLd(departure, siteConfig.url),
-            breadcrumbJsonLd(departure, siteConfig.url),
-          ]),
-        }}
+      <JsonLd
+        data={[
+          departureJsonLd(departure, siteConfig.url),
+          breadcrumbJsonLd(departure, siteConfig.url),
+        ]}
       />
 
       {/* 1 — HEADER. Shadow-based legibility, exactly as the hero does it: no

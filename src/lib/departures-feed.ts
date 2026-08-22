@@ -20,6 +20,7 @@ import {
 
 export type FeedDeparture = {
   id: string;
+  slug: string;
   trekId: string;
   trekName: string;
   region: string;
@@ -50,6 +51,7 @@ export type FeedDeparture = {
 
 const DOCS: Record<string, string> = {
   id: "Stable identifier for this departure. Never reused.",
+  slug: "The public URL segment for this departure. Use bookingUrl to link.",
   trekId: "Identifier of the trek this departure belongs to.",
   trekName: "Human-readable trek name.",
   region: "Region of Nepal, e.g. Khumbu, Annapurna, Langtang, Mustang, Terai.",
@@ -92,6 +94,7 @@ export function buildFeed(origin: string) {
 
   const entries: FeedDeparture[] = departures.map((d) => ({
     id: d.id,
+    slug: d.slug,
     trekId: d.trekId,
     trekName: d.trekName,
     region: d.region,
@@ -116,8 +119,22 @@ export function buildFeed(origin: string) {
     priceIncludes: d.priceIncludes,
     priceExcludes: d.priceExcludes,
     costSheetUrl: absolute(d.costSheetHref),
-    bookingUrl: absolute(`/departures/${d.id}`),
-    groupSoFar: d.groupSoFar,
+    // Built from the slug, which is what the route actually is. This was `d.id`
+    // and every bookingUrl in the public feed was a 404 — `check:links` reads
+    // hrefs out of components and never saw a URL assembled in a library.
+    bookingUrl: absolute(`/departures/${d.slug}`),
+    /*
+     * Country and count, listed field by field.
+     *
+     * Deliberately not `d.groupSoFar` passed through: that publishes whatever
+     * the type happens to hold on the day someone adds a field to it. These are
+     * real customers who agreed to none of this, and the safe shape for a
+     * public feed is one that has to be edited to widen.
+     */
+    groupSoFar: d.groupSoFar.map((g) => ({
+      country: g.country,
+      count: g.count,
+    })),
   }));
 
   return {
@@ -125,7 +142,15 @@ export function buildFeed(origin: string) {
     version: 1,
     lastUpdated: now.toISOString(),
     license: "Free to read, cache and republish with attribution.",
-    contact: "hello@everesttrailways.com",
+    /*
+     * A page, not a mailbox.
+     *
+     * The address is on the site for people to use; putting it in a
+     * machine-readable file that invites republication is how it ends up in
+     * every scraped address list there is. Anyone with a real question can
+     * follow the link.
+     */
+    contact: absolute("/plan"),
     docs: DOCS,
     departures: entries,
   };

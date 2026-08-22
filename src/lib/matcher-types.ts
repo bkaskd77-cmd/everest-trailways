@@ -140,92 +140,207 @@ export function parseMatcherJson(raw: string): Record<string, unknown> | null {
   }
 }
 
-const str = (v: unknown, fallback = ""): string =>
-  typeof v === "string" ? v.trim() : fallback;
+/* ---------------------------------------------------------- strict validation */
 
 /**
- * Coerce a parsed object into a MatcherResult, dropping anything that does not
- * hold up.
+ * The exact keys each object may carry. Not a minimum — a complete list.
  *
- * `validIds` is the second enforcement of hard constraint 1: the prompt tells
- * the model only to name real departures, and this throws away any id that is
- * not one regardless of what it was told. A recommendation the site cannot link
- * to is worse than no recommendation.
+ * An unexpected key is not ignored, it is fatal. That is the difference between
+ * coercion and validation, and it matters here: the model is downstream of
+ * hostile free text, so a response carrying a field nobody designed is evidence
+ * that something is steering it. The right response to evidence of that is to
+ * throw the whole answer away, not to pick the familiar parts out of it.
  */
-export function coerceResult(
+const ALLOWED = {
+  root: ["message", "done", "question", "matches", "beyond"],
+  question: ["text", "options"],
+  match: ["id", "reason", "caution"],
+  beyond: ["id", "exceeds"],
+} as const;
+
+/**
+ * Angle brackets anywhere in the model's output.
+ *
+ * The sanitiser strips them, so nothing dangerous would render either way. This
+ * rejects instead, because stripping leaves the *residue* on the page: an
+ * injected `<a href=...>` becomes a sentence with a bare URL in it, which is
+ * still an attacker choosing what a visitor reads.
+ *
+ * More to the point, a model answering a question about trek dates has no
+ * reason to emit a tag. One appearing is evidence the model is being steered,
+ * and the correct response to that evidence is to discard the turn, not to
+ * tidy it up and publish it.
+ */
+function hasMarkup(parsed: unknown): boolean {
+  // Serialised rather than walked: this has to cover every field at every
+  // depth, including fields the schema does not know about, and JSON.stringify
+  // already visits all of them. The second test catches the six literal
+  // characters of a unicode escape, which is how the same payload arrives when
+  // the model has been asked to encode it.
+  const flat = JSON.stringify(parsed) ?? "";
+  return /[<>]/.test(flat) || /\\u003[ce]/i.test(flat);
+}
+
+function keysOk(value: unknown, allowed: readonly string[]): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.keys(value).every((k) => allowed.includes(k));
+}
+
+export type ValidationFailure =
+  | "not-an-object"
+  | "unknown-field"
+  | "bad-message"
+  | "bad-done"
+  | "bad-question"
+  | "bad-match"
+  | "unknown-id"
+  | "bad-beyond"
+  | "too-many"
+  | "echoes-input"
+  | "markup";
+
+export type ValidationOutcome =
+  { ok: true; result: MatcherResult } | { ok: false; why: ValidationFailure };
+
+/**
+ * Turn parsed JSON into a MatcherResult, or refuse.
+ *
+ * There is no partial success. Every failure returns a reason and the caller
+ * serves the deterministic matcher instead — the model gets to choose between
+ * the shape it was given and having no voice at all, which is the only
+ * arrangement under which a prompt injection cannot put prose on the page.
+ *
+ * Two enforcements happen here that the prompt only asks for:
+ *   - every id must exist in the dataset, so a recommendation always points at
+ *     something real;
+ *   - every match is re-tested against what the person actually stated, and one
+ *     that breaks a stated ceiling is moved to `beyond` rather than shown as a
+ *     fit. The model is told the rule; this is what makes the rule true.
+ */
+export function validateResult(
   parsed: Record<string, unknown>,
   options: {
     validIds: readonly string[];
     maxMatches: number;
-    /**
-     * Returns the breach a departure commits against what the person stated,
-     * or null if it commits none. The model is told the rule; this is what
-     * makes the rule true. A departure it puts in `matches` that breaks a
-     * stated ceiling is moved to `beyond`, not dropped and not shown as a fit.
-     */
     breach: (id: string) => string | null;
+    /** Raw user turns, to refuse output that quotes them back. */
+    userText?: string[];
+    clean: (value: unknown, limit: number) => string;
+    limits: {
+      message: number;
+      reason: number;
+      caution: number;
+      exceeds: number;
+      questionText: number;
+      option: number;
+    };
+    echoes: (output: string, userText: string[]) => boolean;
   },
-): MatcherResult | null {
-  const { validIds, maxMatches, breach } = options;
-  const message = str(parsed.message);
-  if (!message) return null;
+): ValidationOutcome {
+  const {
+    validIds,
+    maxMatches,
+    breach,
+    userText = [],
+    clean,
+    limits,
+    echoes,
+  } = options;
 
-  const rawMatches = Array.isArray(parsed.matches) ? parsed.matches : [];
+  const no = (why: ValidationFailure): ValidationOutcome => ({
+    ok: false,
+    why,
+  });
+
+  if (!keysOk(parsed, ALLOWED.root)) return no("unknown-field");
+
+  // Checked across the whole document before anything is cleaned, so a tag in
+  // any field — not only the ones that get rendered — condemns the answer.
+  if (hasMarkup(parsed)) return no("markup");
+
+  const message = clean(parsed.message, limits.message);
+  if (!message) return no("bad-message");
+
+  if (typeof parsed.done !== "boolean") return no("bad-done");
+
+  // The model must answer with our facts, never with their words.
+  if (echoes(message, userText)) return no("echoes-input");
+
+  /* ------------------------------------------------------------- question */
+
+  let question: MatcherQuestion | null = null;
+  if (parsed.question !== null && parsed.question !== undefined) {
+    if (!keysOk(parsed.question, ALLOWED.question)) return no("unknown-field");
+    const row = parsed.question as Record<string, unknown>;
+    const text = clean(row.text, limits.questionText);
+    if (!text) return no("bad-question");
+    if (!Array.isArray(row.options)) return no("bad-question");
+    const opts = row.options
+      .map((o) => clean(o, limits.option))
+      .filter(Boolean);
+    if (opts.length < 2 || opts.length > 4) return no("bad-question");
+    if (echoes(`${text} ${opts.join(" ")}`, userText))
+      return no("echoes-input");
+    question = { text, options: opts.slice(0, 3) };
+  }
+
+  /* -------------------------------------------------------------- matches */
+
+  if (!Array.isArray(parsed.matches)) return no("bad-match");
+  if (parsed.matches.length > maxMatches) return no("too-many");
+
   const matches: Match[] = [];
   const beyond: Beyond[] = [];
   const seen = new Set<string>();
 
-  for (const entry of rawMatches) {
-    if (!entry || typeof entry !== "object") continue;
+  for (const entry of parsed.matches) {
+    if (!keysOk(entry, ALLOWED.match)) return no("unknown-field");
     const row = entry as Record<string, unknown>;
-    const id = str(row.id);
-    if (!validIds.includes(id) || seen.has(id)) continue;
-    seen.add(id);
+    if (typeof row.id !== "string") return no("bad-match");
+    if (!validIds.includes(row.id)) return no("unknown-id");
+    if (seen.has(row.id)) return no("bad-match");
+    seen.add(row.id);
 
-    // The safety rule is enforced here, not asked for politely in the prompt.
-    const exceeds = breach(id);
+    const reason = clean(row.reason, limits.reason);
+    const caution = clean(row.caution, limits.caution);
+    if (!reason) return no("bad-match");
+    if (echoes(`${reason} ${caution}`, userText)) return no("echoes-input");
+
+    const exceeds = breach(row.id);
     if (exceeds) {
-      beyond.push({ id, exceeds });
+      beyond.push({ id: row.id, exceeds });
       continue;
     }
-
     matches.push({
-      id,
-      reason: str(row.reason),
-      caution: str(
-        row.caution,
-        "Ask us anything you are unsure about before committing.",
-      ),
+      id: row.id,
+      reason,
+      caution:
+        caution || "Ask us anything you are unsure about before committing.",
     });
-    if (matches.length >= maxMatches) break;
   }
 
-  // Anything the model itself put beyond the line, checked the same way.
-  const rawBeyond = Array.isArray(parsed.beyond) ? parsed.beyond : [];
-  for (const entry of rawBeyond) {
-    if (!entry || typeof entry !== "object") continue;
-    const row = entry as Record<string, unknown>;
-    const id = str(row.id);
-    if (!validIds.includes(id) || seen.has(id)) continue;
-    const exceeds = breach(id);
-    // A departure that breaks nothing does not belong in this group either.
-    if (!exceeds) continue;
-    seen.add(id);
-    beyond.push({ id, exceeds: str(row.exceeds) || exceeds });
-  }
+  /* --------------------------------------------------------------- beyond */
 
-  let question: MatcherQuestion | null = null;
-  const q = parsed.question;
-  if (q && typeof q === "object" && !Array.isArray(q)) {
-    const row = q as Record<string, unknown>;
-    const text = str(row.text);
-    const options = Array.isArray(row.options)
-      ? row.options
-          .map((o) => str(o))
-          .filter(Boolean)
-          .slice(0, 3)
-      : [];
-    if (text && options.length >= 2) question = { text, options };
+  if (parsed.beyond !== undefined) {
+    if (!Array.isArray(parsed.beyond)) return no("bad-beyond");
+    if (parsed.beyond.length > maxMatches) return no("too-many");
+
+    for (const entry of parsed.beyond) {
+      if (!keysOk(entry, ALLOWED.beyond)) return no("unknown-field");
+      const row = entry as Record<string, unknown>;
+      if (typeof row.id !== "string") return no("bad-beyond");
+      if (!validIds.includes(row.id)) return no("unknown-id");
+      if (seen.has(row.id)) continue;
+
+      // A departure that breaks nothing does not belong in this group.
+      const exceeds = breach(row.id);
+      if (!exceeds) continue;
+      seen.add(row.id);
+
+      const stated = clean(row.exceeds, limits.exceeds);
+      if (echoes(stated, userText)) return no("echoes-input");
+      beyond.push({ id: row.id, exceeds: stated || exceeds });
+    }
   }
 
   // `done` is derived from what actually survived, not from what was claimed:
@@ -233,11 +348,14 @@ export function coerceResult(
   const done = parsed.done === true || question === null;
 
   return {
-    message,
-    done,
-    question: done ? null : question,
-    matches: done ? matches : [],
-    beyond: done ? beyond.slice(0, maxMatches) : [],
-    source: "assistant",
+    ok: true,
+    result: {
+      message,
+      done,
+      question: done ? null : question,
+      matches: done ? matches.slice(0, maxMatches) : [],
+      beyond: done ? beyond.slice(0, maxMatches) : [],
+      source: "assistant",
+    },
   };
 }

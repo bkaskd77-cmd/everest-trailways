@@ -4,6 +4,7 @@ import { DepartureIndex } from "@/components/departure/departure-index";
 import { departureJsonLd } from "@/lib/departures-feed";
 import { departures } from "@/content/departures";
 import { siteConfig } from "@/lib/site";
+import { JsonLd } from "@/components/json-ld";
 
 export const metadata: Metadata = {
   title: "All departures",
@@ -25,10 +26,7 @@ export default function DeparturesIndexPage() {
 
   return (
     <main className="bg-band-sunk">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      <JsonLd data={jsonLd} />
 
       <div className="shell pt-32 pb-24 lg:pt-40 lg:pb-28">
         <p className="text-xs tracking-[0.24em] text-muted-foreground uppercase">
