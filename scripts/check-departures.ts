@@ -638,6 +638,194 @@ for (const d of departures) {
   }
 }
 
+/* ------------------------------------------------- gallery, detail and faq */
+
+/*
+ * The sections that answer what a first-timer is actually asking.
+ *
+ * Each rule here exists because the obvious version of the section fails in a
+ * specific way: a gallery of six summits, practicalities with the awkward field
+ * left blank, an FAQ of easy questions, or answers that quote a price the cost
+ * sheet on the same page contradicts.
+ */
+const PRACTICALITY_FIELDS = [
+  "accommodation",
+  "roomSharing",
+  "toilets",
+  "showers",
+  "food",
+  "dietary",
+  "water",
+  "electricity",
+  "signal",
+  "luggage",
+  "laundry",
+] as const;
+
+for (const d of departures) {
+  const { id } = d;
+
+  /* ------------------------------------------------------------ gallery */
+
+  if (d.gallery.length < 6) {
+    fail(id, "thin-gallery", `${d.gallery.length} images, fewer than 6`);
+  }
+  // The whole argument of the gallery. Operators publish summits; the two
+  // questions people are too embarrassed to ask are what the room is like and
+  // what is on the plate.
+  for (const required of ["accommodation", "food"] as const) {
+    if (!d.gallery.some((image) => image.category === required)) {
+      fail(
+        id,
+        "gallery-missing-basics",
+        `no "${required}" image — a gallery of scenery answers the question nobody asked`,
+      );
+    }
+  }
+  for (const image of d.gallery) {
+    if (!image.alt.trim())
+      fail(id, "gallery-no-alt", `${image.src} has no alt`);
+    if (image.caption.trim().length < 20) {
+      fail(id, "gallery-thin-caption", `"${image.caption}" is not a caption`);
+    }
+  }
+
+  /* ------------------------------------------------------------- coords */
+
+  for (const day of d.itinerary) {
+    if (!day.coords) {
+      fail(
+        id,
+        "no-coords",
+        `day ${day.day} sleeps at "${day.toPlace}", which has no entry in PLACES, so the route map cannot draw it`,
+      );
+      continue;
+    }
+    const [lat, lon] = day.coords;
+    // Nepal, generously bounded. Catches a transposed pair immediately.
+    if (lat < 26 || lat > 31 || lon < 80 || lon > 89) {
+      fail(
+        id,
+        "bad-coords",
+        `day ${day.day} at "${day.toPlace}" is at ${lat}, ${lon}, which is not in Nepal`,
+      );
+    }
+  }
+
+  /* ---------------------------------------------------- practicalities */
+
+  if (!d.practicalities) {
+    fail(id, "no-practicalities", "nothing published about what it is like");
+  } else {
+    for (const field of PRACTICALITY_FIELDS) {
+      const value = d.practicalities[field];
+      if (!value?.trim()) {
+        fail(id, "practicalities-gap", `"${field}" is empty`);
+      } else if (value.trim().length < 40) {
+        fail(
+          id,
+          "practicalities-thin",
+          `"${field}" is ${value.trim().length} characters — too short to be an honest answer`,
+        );
+      }
+    }
+    const prose = Object.values(d.practicalities).join(" ").toLowerCase();
+    for (const word of BANNED_ADJECTIVES) {
+      if (prose.includes(word.toLowerCase())) {
+        fail(
+          id,
+          "marketing-adjective",
+          `practicalities use "${word}" — the point of this section is that it does not`,
+        );
+      }
+    }
+  }
+
+  /* ---------------------------------------------------------------- faq */
+
+  if (d.faqs.length < 8) {
+    fail(id, "thin-faq", `${d.faqs.length} questions, fewer than 8`);
+  }
+
+  const faqQuestions = new Set<string>();
+  for (const faq of d.faqs) {
+    if (faqQuestions.has(faq.question)) {
+      fail(id, "duplicate-faq", `"${faq.question}" appears twice`);
+    }
+    faqQuestions.add(faq.question);
+    if (!faq.question.trim().endsWith("?")) {
+      fail(id, "bad-faq", `"${faq.question}" is not a question`);
+    }
+    if (faq.answer.trim().length < 60) {
+      fail(id, "thin-answer", `the answer to "${faq.question}" is too short`);
+    }
+  }
+
+  // The uncomfortable ones, which are the reason the section is worth having.
+  const asked = [...faqQuestions].join(" ").toLowerCase();
+  for (const [topic, needle] of [
+    ["keeping up", "keep up"],
+    ["altitude sickness", "altitude sickness"],
+    ["the group", "group"],
+    ["leaving early", "leave early"],
+    ["the guide's licence", "licence"],
+    ["a single room", "single room"],
+    ["cancellation", "cancel"],
+  ] as const) {
+    if (!asked.includes(needle)) {
+      fail(
+        id,
+        "faq-avoids-the-question",
+        `nothing about ${topic} — an FAQ that only answers the comfortable ones is marketing`,
+      );
+    }
+  }
+
+  /*
+   * The answers quote this date's numbers, so they can contradict the page.
+   *
+   * Every dollar figure in an answer is pulled back out and checked against the
+   * departure. An FAQ saying the price is $1,890 on a page whose cost sheet
+   * says $1,990 is worse than no FAQ: it is the same broken promise, in the
+   * voice of somebody answering a worry.
+   */
+  const allowedFigures = new Set<number>([
+    d.priceUSD,
+    d.singleSupplementUSD,
+    d.minimumToRun,
+    d.maxAltitudeM,
+    d.groupSizeMax,
+    d.days,
+    d.assistantGuideAbove ?? -1,
+    d.costSheet.tipping.typicalRangeUSD[0],
+    d.costSheet.tipping.typicalRangeUSD[1],
+    ...d.costSheet.optionalExtras.map((e) => e.amountUSD),
+  ]);
+
+  for (const faq of d.faqs) {
+    for (const match of faq.answer.matchAll(/\$([\d,]+)/g)) {
+      const figure = Number(match[1].replace(/,/g, ""));
+      if (!allowedFigures.has(figure)) {
+        fail(
+          id,
+          "faq-contradiction",
+          `an answer quotes $${figure}, which is not this departure's price, supplement, tipping range or any optional extra`,
+        );
+      }
+    }
+    if (
+      faq.answer.includes(d.decisionDate) === false &&
+      /decision date/i.test(faq.answer)
+    ) {
+      fail(
+        id,
+        "faq-contradiction",
+        "an answer refers to a decision date it does not state",
+      );
+    }
+  }
+}
+
 /* ------------------------------------------------------------ coverage rules */
 
 /*

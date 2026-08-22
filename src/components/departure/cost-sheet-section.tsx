@@ -3,7 +3,7 @@ import { Download } from "lucide-react";
 
 import { AskPanel } from "@/components/departures/ask-panel";
 import { CostLedger } from "@/components/departure/cost-ledger";
-import { Reveal } from "@/components/motion";
+import { SectionHead } from "@/components/departure/section-head";
 import { Button } from "@/components/ui/button";
 import type { Contingency, Departure } from "@/content/departures";
 import { cn } from "@/lib/utils";
@@ -82,7 +82,14 @@ function ContingencyEntry({ item }: { item: Contingency }) {
 
   return (
     <li className="border-t border-border py-6 first:border-t-0 first:pt-0">
-      <div className="grid gap-x-10 gap-y-4 lg:grid-cols-[minmax(0,1fr)_15rem]">
+      {/*
+        The verdict box sits in a column next to the text, not pinned to the
+        page edge. At 1,440px the old `1fr 15rem` split left a corridor of empty
+        band between a 62ch paragraph and a box hard against the right margin,
+        so the two halves of one entry read as unrelated. Capping the prose
+        column and keeping the gap tight pulls them back together.
+      */}
+      <div className="grid gap-x-10 gap-y-4 lg:grid-cols-[minmax(0,46rem)_16rem] lg:justify-start">
         <div>
           <h4 className="max-w-[62ch] text-base font-medium">{item.trigger}</h4>
           <p className="mt-2 max-w-[68ch] text-sm text-muted-foreground">
@@ -163,22 +170,15 @@ export function CostSheetSection({ departure }: { departure: Departure }) {
       className="scroll-mt-24 border-t border-border"
     >
       <div className="shell py-16 lg:py-20">
-        <Reveal>
-          <p className="text-xs tracking-[0.24em] text-muted-foreground uppercase">
-            Cost sheet
-          </p>
-          <h2
-            id="cost-heading"
-            className="mt-4 max-w-[16ch] font-display text-3xl tracking-tight text-balance lg:text-5xl"
-          >
-            Where every dollar goes.
-          </h2>
-          <p className="mt-5 max-w-[62ch] text-base text-muted-foreground">
-            The {money(departure.priceUSD)} on this page is itemised below and
-            the lines add up to it exactly. There are {included.length},
-            starting at {bookends.first} and ending at {bookends.last}.
-          </p>
-        </Reveal>
+        <SectionHead
+          eyebrow="Cost sheet"
+          title="Where every dollar goes."
+          id="cost-heading"
+        >
+          The {money(departure.priceUSD)} on this page is itemised below and the
+          lines add up to it exactly. There are {included.length}, starting at{" "}
+          {bookends.first} and ending at {bookends.last}.
+        </SectionHead>
 
         {/* 1 — THE LEDGER */}
         <div className="mt-12 lg:mt-16">
@@ -223,15 +223,10 @@ export function CostSheetSection({ departure }: { departure: Departure }) {
         {/* 1b — OPTIONAL EXTRAS */}
         {extras.length > 0 && (
           <div className="mt-16 lg:mt-20">
-            <Reveal>
-              <h3 className="font-display text-2xl tracking-tight lg:text-3xl">
-                Optional, and not in the price.
-              </h3>
-              <p className="mt-4 max-w-[62ch] text-base text-muted-foreground">
-                Things you can add. None of them is required, none is assumed,
-                and none is in the total above.
-              </p>
-            </Reveal>
+            <SectionHead level="h3" title="Optional, and not in the price.">
+              Things you can add. None of them is required, none is assumed, and
+              none is in the total above.
+            </SectionHead>
 
             <table className="mt-8 w-full border-collapse text-left">
               <caption className="sr-only">
@@ -264,17 +259,12 @@ export function CostSheetSection({ departure }: { departure: Departure }) {
 
         {/* 2 — NOT INCLUDED */}
         <div className="mt-16 lg:mt-20">
-          <Reveal>
-            <h3 className="font-display text-2xl tracking-tight lg:text-3xl">
-              Not included.
-            </h3>
-            <p className="mt-4 max-w-[62ch] text-base text-muted-foreground">
-              Estimates, not charges — you pay these to other people, not to us.
-              They are here with figures because an exclusion without a number
-              is a way of disclosing a cost while leaving you unable to budget
-              for it.
-            </p>
-          </Reveal>
+          <SectionHead level="h3" title="Not included.">
+            Estimates, not charges — you pay these to other people, not to us.
+            They are here with figures because an exclusion without a number is
+            a way of disclosing a cost while leaving you unable to budget for
+            it.
+          </SectionHead>
 
           <div className="mt-8">
             <CostLedger
@@ -291,17 +281,12 @@ export function CostSheetSection({ departure }: { departure: Departure }) {
 
         {/* 3 — WHEN THINGS GO WRONG */}
         <div className="mt-16 lg:mt-20">
-          <Reveal>
-            <h3 className="font-display text-2xl tracking-tight lg:text-3xl">
-              When things go wrong.
-            </h3>
-            <p className="mt-4 max-w-[68ch] text-base text-muted-foreground">
-              We publish this because most operators do not, and because the
-              alternative is finding out at one in the morning on the road to
-              Ramechhap. Each of these has happened. For each one, here is what
-              we do and who pays.
-            </p>
-          </Reveal>
+          <SectionHead level="h3" title="When things go wrong.">
+            We publish this because most operators do not, and because the
+            alternative is finding out at one in the morning on the road to
+            Ramechhap. Each of these has happened. For each one, here is what we
+            do and who pays.
+          </SectionHead>
 
           <ul className="mt-10">
             {costSheet.contingencies.map((item) => (
@@ -312,11 +297,10 @@ export function CostSheetSection({ departure }: { departure: Departure }) {
 
         {/* 4 — INSURANCE */}
         <div className="mt-16 border-t border-border pt-12 lg:mt-20">
-          <Reveal>
-            <h3 className="font-display text-2xl tracking-tight lg:text-3xl">
-              Insurance you must have.
-            </h3>
-          </Reveal>
+          <SectionHead level="h3" title="Insurance you must have.">
+            Three numbers, and one thing travellers routinely get wrong. Check
+            the policy wording against them before you buy it.
+          </SectionHead>
 
           <dl className="mt-8 grid gap-x-10 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
             <div>
@@ -358,14 +342,9 @@ export function CostSheetSection({ departure }: { departure: Departure }) {
 
         {/* 5 — TIPPING */}
         <div className="mt-16 border-t border-border pt-12 lg:mt-20">
-          <Reveal>
-            <h3 className="font-display text-2xl tracking-tight lg:text-3xl">
-              Tipping.
-            </h3>
-          </Reveal>
-          <p className="mt-4 max-w-[68ch] text-base text-muted-foreground">
+          <SectionHead level="h3" title="Tipping.">
             {costSheet.tipping.guidance}
-          </p>
+          </SectionHead>
           <p className="mt-6 tabular text-base">
             Typical for this trip: {money(tipLow)}–{money(tipHigh)} per person,
             across the whole group of staff.{" "}

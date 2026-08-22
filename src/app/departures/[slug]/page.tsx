@@ -8,7 +8,6 @@ import { AltitudeProfile } from "@/components/departure/altitude-profile";
 import { GlanceBar } from "@/components/departure/glance-bar";
 import { ItineraryList } from "@/components/departure/itinerary-list";
 import { AskPanel } from "@/components/departures/ask-panel";
-import { Reveal } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import {
   bySlug,
@@ -27,6 +26,34 @@ import { siteConfig } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import { JsonLd } from "@/components/json-ld";
 import { CostSheetSection } from "@/components/departure/cost-sheet-section";
+import { RouteMap } from "@/components/departure/route-map";
+import { SectionHead } from "@/components/departure/section-head";
+import { faqJsonLd } from "@/lib/departures-feed";
+
+/*
+ * What is actually deferred here, and what is not.
+ *
+ * The obvious move — wrap every below-fold section in `next/dynamic` — was
+ * measured and does nothing. Two of these are server components and server
+ * components ship no client JavaScript at all, so importing them dynamically
+ * defers zero bytes. The two client ones render in the initial tree, so Next
+ * preloads their chunks anyway; the page loaded the same 280KB before a single
+ * scroll either way.
+ *
+ * So the wrappers are gone from the server components, where they were pure
+ * indirection with a comment claiming a benefit they did not deliver. What is
+ * genuinely deferred is inside the gallery: the lightbox, its focus trap and
+ * its keyboard handling load on the first click and not before, because until
+ * somebody opens an image none of that code can run.
+ *
+ * The prose is prerendered into the HTML in every case, which is the property
+ * that actually matters for this page — a crawler and an assistant read the
+ * FAQ and the cost sheet whether or not any JavaScript arrives.
+ */
+import { FaqAccordion } from "@/components/departure/faq-section";
+import { OtherDates } from "@/components/departure/other-dates";
+import { PracticalitiesSection } from "@/components/departure/practicalities";
+import { TrekGallery } from "@/components/departure/trek-gallery";
 
 /**
  * One departure, in full.
@@ -93,6 +120,37 @@ export default async function DeparturePage({
   const needed = seatsToGuarantee(departure);
   const bookable = status !== "full" && status !== "closed";
   const highest = highestSleep(departure);
+  /*
+   * Other dates on this trek, and what to offer when there are none.
+   *
+   * The fallback is the nearest by region and length rather than by price,
+   * because somebody reading a nine-day Annapurna page wants a nine-day walk in
+   * the same part of the country — not whatever costs about the same. They are
+   * labelled as different treks, which is the whole point of showing them.
+   */
+  const sameTrek = departures
+    .filter((other) => other.trekId === departure.trekId)
+    .sort((a, b) => a.departsOn.localeCompare(b.departsOn));
+
+  const alternatives =
+    sameTrek.length > 1
+      ? []
+      : departures
+          .filter((other) => other.trekId !== departure.trekId)
+          .map((other) => ({
+            other,
+            distance:
+              (other.region === departure.region ? 0 : 40) +
+              Math.abs(other.days - departure.days) * 6,
+          }))
+          .sort(
+            (a, b) =>
+              a.distance - b.distance ||
+              a.other.departsOn.localeCompare(b.other.departsOn),
+          )
+          .slice(0, 4)
+          .map((entry) => entry.other);
+
   const accDays = departure.acclimatisationDays;
 
   return (
@@ -101,6 +159,7 @@ export default async function DeparturePage({
         data={[
           departureJsonLd(departure, siteConfig.url),
           breadcrumbJsonLd(departure, siteConfig.url),
+          faqJsonLd(departure, siteConfig.url),
         ]}
       />
 
@@ -309,30 +368,55 @@ export default async function DeparturePage({
           </div>
         </section>
 
-        {/* 4 — ALTITUDE PROFILE */}
+        {/* 4 — GALLERY. The room and the plate before the mountain. */}
+        <section
+          id="gallery"
+          aria-labelledby="gallery-heading"
+          className="scroll-mt-24 border-t border-border"
+        >
+          <div className="shell py-16 lg:py-20">
+            <SectionHead
+              eyebrow="What you are buying"
+              title="The room, the plate, the trail."
+              id="gallery-heading"
+            >
+              Operators publish summits. You have seen the summit. These are the
+              things people actually want to know and are slightly embarrassed
+              to ask about — where you sleep, what is on the plate, and what the
+              trail underfoot is like.
+            </SectionHead>
+
+            <div className="mt-12 lg:mt-16">
+              <TrekGallery images={departure.gallery} />
+            </div>
+          </div>
+        </section>
+
+        {/* 5 — ROUTE AND ALTITUDE, read together */}
         <section
           aria-labelledby="altitude-heading"
           className="border-t border-border bg-band"
         >
           <div className="shell py-16 lg:py-20">
-            <Reveal>
-              <p className="text-xs tracking-[0.24em] text-muted-foreground uppercase">
-                Altitude profile
-              </p>
-              <h2
-                id="altitude-heading"
-                className="mt-4 max-w-[24ch] font-display text-3xl tracking-tight text-balance lg:text-4xl"
-              >
-                Where you sleep, night by night.
-              </h2>
-              <p className="mt-4 max-w-[62ch] text-base text-muted-foreground">
-                Altitude illness follows the altitude you sleep at, not the
-                highest point you touch during the day. This plots the sleeping
-                altitude of every night on the trek.
-              </p>
-            </Reveal>
+            <SectionHead
+              eyebrow="Route and altitude"
+              title="Where you go, and where you sleep."
+              id="altitude-heading"
+            >
+              Altitude illness follows the altitude you sleep at, not the
+              highest point you touch during the day. The diagram shows the
+              shape of the route; the chart below it plots the sleeping altitude
+              of every night on the trek.
+            </SectionHead>
 
             <div className="mt-10">
+              <RouteMap
+                itinerary={departure.itinerary}
+                trekName={departure.trekName}
+              />
+            </div>
+
+            <div className="mt-14">
               <AltitudeProfile
                 itinerary={departure.itinerary}
                 trekName={departure.trekName}
@@ -454,10 +538,42 @@ export default async function DeparturePage({
           </div>
         </section>
 
-        {/* 7 — COST SHEET PLACEHOLDER */}
+        {/* 7 — PRACTICAL DETAIL */}
+        <PracticalitiesSection practicalities={departure.practicalities} />
+
+        {/* 8 — COST SHEET, and everything that hangs off it */}
         <CostSheetSection departure={departure} />
 
-        {/* 8 — CLOSING */}
+        {/* 9 — FAQ */}
+        <section
+          id="faq"
+          aria-labelledby="faq-heading"
+          className="scroll-mt-24 border-t border-border bg-band-sunk"
+        >
+          <div className="shell py-16 lg:py-20">
+            <SectionHead
+              eyebrow="Questions"
+              title="The awkward ones, answered."
+              id="faq-heading"
+            >
+              What if you cannot keep up, what if you do not get on with the
+              group, what happens to your money. These are answered for this
+              date specifically, with this date&rsquo;s own numbers, so nothing
+              here can drift out of step with the cost sheet above.
+            </SectionHead>
+
+            <FaqAccordion faqs={departure.faqs} />
+          </div>
+        </section>
+
+        {/* 10 — OTHER DATES */}
+        <OtherDates
+          departure={departure}
+          sameTrek={sameTrek}
+          alternatives={alternatives}
+        />
+
+        {/* 11 — CLOSING */}
         <section
           aria-labelledby="closing-heading"
           className="border-t border-border bg-band"

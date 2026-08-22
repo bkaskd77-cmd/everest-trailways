@@ -266,3 +266,28 @@ export function breadcrumbJsonLd(
     ],
   };
 }
+
+/**
+ * FAQPage structured data.
+ *
+ * This is how an AI planner quotes us. Somebody asking an assistant "what
+ * happens if I get altitude sickness on an Everest trek" gets an answer
+ * assembled from whatever the assistant can parse, and an operator whose
+ * answers are only in an accordion is an operator that does not appear in it.
+ *
+ * Every answer here also exists as literal text on the page — the accordion
+ * keeps its panels mounted for exactly this reason. This is a second copy in a
+ * shape a parser can use, never the only copy.
+ */
+export function faqJsonLd(d: (typeof departures)[number], origin: string) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "@id": new URL(`/departures/${d.slug}#faq`, origin).toString(),
+    mainEntity: d.faqs.map((faq) => ({
+      "@type": "Question",
+      name: faq.question,
+      acceptedAnswer: { "@type": "Answer", text: faq.answer },
+    })),
+  };
+}

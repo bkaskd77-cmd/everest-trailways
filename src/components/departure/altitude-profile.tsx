@@ -25,13 +25,47 @@ import { cn } from "@/lib/utils";
  * readable by a screen reader — an SVG polyline is not data anyone can quote.
  */
 
-const H = 220;
-const PAD_T = 28;
-const PAD_B = 44;
-const PAD_L = 52;
-const PAD_R = 16;
-/** Horizontal room per day. Below this the labels collide, so it scrolls. */
-const DAY_W = 62;
+/*
+ * The chart fills its column.
+ *
+ * It used to be drawn at a fixed 62px per day, which on a four-day trek came to
+ * 254px sitting in a 1,200px section — the safety centrepiece of the page,
+ * rendered at a fifth of the width available to it and illegible without
+ * zooming. An SVG cannot know how wide its container is, so the container is
+ * measured and the day spacing is derived from it.
+ *
+ * The first attempt measured the container with a ResizeObserver and derived
+ * the day spacing from it. It worked and it was wrong to depend on: the chart
+ * then had a correct size only after hydration, in a browser that was actually
+ * painting, with an observer that had actually fired. Three conditions, for a
+ * layout question CSS can answer on its own.
+ *
+ * So the viewBox is drawn at its natural minimum — the spacing at which the day
+ * labels stop colliding — and the SVG is set to 100% width. The browser scales
+ * the whole drawing, type included, to whatever column it lands in. A cap keeps
+ * it from growing so tall that it stops being a chart, and a floor keeps it
+ * legible on a phone where the container scrolls sideways instead. No
+ * JavaScript, no measurement, nothing to fail on a slow hydration.
+ */
+const H = 320;
+const PAD_T = 34;
+const PAD_B = 58;
+const PAD_L = 64;
+const PAD_R = 20;
+/**
+ * The natural width every profile is drawn at, whatever its length.
+ *
+ * Day spacing is derived from it rather than fixed, because a fixed spacing
+ * makes a four-day trek a 270px viewBox — and a 270px viewBox scaled up to fill
+ * a desktop column would be nine hundred pixels tall. Deriving the spacing
+ * gives a short trek generous day columns and a long one tighter ones, and both
+ * end up the same shape.
+ */
+const TARGET_W = 900;
+/** Below this the day labels collide, so a long trek scrolls instead. */
+const MIN_DAY_W = 62;
+/** Tallest the chart may be drawn. Above this it reads as a wall, not a line. */
+const MAX_H = 430;
 
 function niceCeiling(value: number): number {
   const step = value > 4000 ? 1000 : value > 1500 ? 500 : 200;
@@ -56,13 +90,19 @@ export function AltitudeProfile({
 }) {
   const [active, setActive] = React.useState<number | null>(null);
 
-  const width = PAD_L + PAD_R + DAY_W * (itinerary.length - 1);
+  const spans = Math.max(1, itinerary.length - 1);
+  const dayW = Math.max(MIN_DAY_W, (TARGET_W - PAD_L - PAD_R) / spans);
+  const width = PAD_L + PAD_R + dayW * spans;
+  // Scaling up is uniform, so the tallest the drawing may get sets the widest
+  // it may get. A four-day trek is a short viewBox and would otherwise stretch
+  // to a column-wide chart nearly six hundred pixels tall.
+  const maxRendered = Math.round((width * MAX_H) / H);
   const top = niceCeiling(
     Math.max(...itinerary.map((d) => d.maxAltitudeM ?? d.sleepAltitudeM)),
   );
   const plotH = H - PAD_T - PAD_B;
 
-  const x = (i: number) => PAD_L + i * DAY_W;
+  const x = (i: number) => PAD_L + i * dayW;
   const y = (alt: number) => PAD_T + plotH - (alt / top) * plotH;
 
   const line = itinerary
@@ -89,11 +129,11 @@ export function AltitudeProfile({
       <div className="-mx-1 overflow-x-auto px-1 pb-2">
         <svg
           viewBox={`0 0 ${width} ${H}`}
-          width={width}
-          height={H}
+          preserveAspectRatio="xMidYMid meet"
+          style={{ minWidth: width, maxWidth: maxRendered }}
           role="img"
           aria-label={`Sleeping altitude by day for ${trekName}, from ${itinerary[0].sleepAltitudeM} metres on day 1 to a high point of ${peakAlt} metres on day ${peak.day.day}. The same figures are listed in the table below.`}
-          className="block max-w-none"
+          className="block h-auto w-full"
           onMouseLeave={() => setActive(null)}
         >
           {ticks(top).map((t) => (
@@ -110,7 +150,7 @@ export function AltitudeProfile({
                 x={PAD_L - 8}
                 y={y(t) + 4}
                 textAnchor="end"
-                className="fill-muted-foreground text-[10px]"
+                className="fill-muted-foreground text-[12px]"
                 style={{ fontVariantNumeric: "tabular-nums" }}
               >
                 {t.toLocaleString("en-GB")}
@@ -177,7 +217,7 @@ export function AltitudeProfile({
                   y={H - PAD_B + 18}
                   textAnchor="middle"
                   className={cn(
-                    "text-[10px]",
+                    "text-[12px]",
                     isActive ? "fill-foreground" : "fill-muted-foreground",
                   )}
                   style={{ fontVariantNumeric: "tabular-nums" }}
@@ -188,9 +228,9 @@ export function AltitudeProfile({
                 {/* The hit area. Bigger than the mark, focusable, and the only
                     thing keyboard users need to reach. */}
                 <rect
-                  x={x(i) - DAY_W / 2}
+                  x={x(i) - dayW / 2}
                   y={PAD_T}
-                  width={DAY_W}
+                  width={dayW}
                   height={plotH}
                   fill="transparent"
                   tabIndex={0}
@@ -220,7 +260,7 @@ export function AltitudeProfile({
               x={x(peak.i)}
               y={y(peakAlt) - 8}
               textAnchor="middle"
-              className="fill-foreground text-[11px] font-medium"
+              className="fill-foreground text-[13px] font-medium"
               style={{ fontVariantNumeric: "tabular-nums" }}
             >
               {peakAlt.toLocaleString("en-GB")} m
@@ -230,7 +270,7 @@ export function AltitudeProfile({
           <text
             x={PAD_L}
             y={H - 6}
-            className="fill-muted-foreground text-[10px] tracking-[0.14em] uppercase"
+            className="fill-muted-foreground text-[11px] tracking-[0.14em] uppercase"
           >
             Day
           </text>

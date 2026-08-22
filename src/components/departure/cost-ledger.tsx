@@ -125,7 +125,7 @@ function Row({
         )}
         {line.payableTo && (
           <span className="mt-1 block text-xs text-muted-foreground">
-            Payable to {line.payableTo}
+            Paid to {line.payableTo}
           </span>
         )}
       </th>
@@ -134,13 +134,27 @@ function Row({
       </td>
       <td className="py-3 text-right align-top tabular text-sm whitespace-nowrap">
         {total === 0 ? (
-          <span className="text-muted-foreground">see note</span>
+          <span className="text-muted-foreground">varies</span>
         ) : (
           money(line.amountUSD)
         )}
       </td>
     </m.tr>
   );
+}
+
+/**
+ * A subtotal for a group whose amounts are all unquantified.
+ *
+ * The not-included table carries lines we cannot price — international flights
+ * from an unknown airport, gear you may already own — and those sit at zero so
+ * they do not distort a total. Rendering that zero as "$0" told the reader the
+ * category was free, which is the opposite of what it means.
+ */
+function subtotalLabel(lines: CostLine[]): string {
+  const total = lines.reduce((sum, l) => sum + l.amountUSD, 0);
+  if (total > 0) return money(total);
+  return lines.every((l) => l.amountUSD === 0) ? "varies" : money(total);
 }
 
 function CategoryBlock({
@@ -155,7 +169,6 @@ function CategoryBlock({
   collapsible: boolean;
 }) {
   const [open, setOpen] = React.useState(true);
-  const subtotal = lines.reduce((sum, l) => sum + l.amountUSD, 0);
   const headingId = `cost-group-${label.replace(/\s+/g, "-").toLowerCase()}`;
 
   return (
@@ -188,7 +201,7 @@ function CategoryBlock({
           )}
         </th>
         <td className="pt-6 pb-2 text-right tabular text-xs text-muted-foreground">
-          {money(subtotal)}
+          {subtotalLabel(lines)}
         </td>
       </tr>
 

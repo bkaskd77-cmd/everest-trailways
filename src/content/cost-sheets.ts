@@ -1154,7 +1154,7 @@ export function buildCostSheet(
     unitLabel: "night",
     included: true,
     note: "Twin share. A single room is an optional extra, not a surcharge.",
-    payableTo: "paid by us directly to the teahouses and lodges",
+    payableTo: "the teahouses and lodges, by us",
   });
 
   if (costs.cityNights && costs.perCityNightUSD) {
@@ -1184,7 +1184,7 @@ export function buildCostSheet(
     unitLabel: "day",
     included: true,
     note: costs.mealsNote,
-    payableTo: "paid by us directly to the teahouses and lodges",
+    payableTo: "the teahouses and lodges, by us",
   });
 
   /* -------------------------------------------------------------- staff */

@@ -37,6 +37,14 @@ export type ItineraryDay = {
   accommodation: "teahouse" | "lodge" | "hotel" | "camp";
   meals: ("breakfast" | "lunch" | "dinner")[];
   note?: string;
+  /**
+   * Where this night is spent, roughly.
+   *
+   * Attached by lookup from `PLACES` rather than typed onto each day: a village
+   * that appears on four treks has one location, and four hand-typed copies of
+   * it is four chances to disagree. Used only to draw the schematic route map.
+   */
+  coords?: LatLon;
   /** Rest and acclimatisation. Marked, never hidden inside a normal day. */
   isAcclimatisation?: boolean;
   /** Flights and drives. Marked, never dressed up as a day of walking. */
@@ -70,11 +78,13 @@ export type TrekProfile = {
 };
 
 /** Where an itinerary is allowed to end. The guard checks the last day. */
+import { PLACES, type LatLon } from "./places.ts";
+
 export const RETURN_POINTS = ["Kathmandu", "Pokhara"] as const;
 
 const BLD: ItineraryDay["meals"] = ["breakfast", "lunch", "dinner"];
 
-export const TREKS: Record<string, TrekProfile> = {
+const TREK_ROUTES: Record<string, TrekProfile> = {
   "everest-base-camp": {
     trekName: "Everest Base Camp",
     region: "Khumbu",
@@ -1208,3 +1218,25 @@ export const TREKS: Record<string, TrekProfile> = {
     ],
   },
 };
+
+/**
+ * Every itinerary day, with its coordinates filled in from the place table.
+ *
+ * Done once here rather than in the map component so the data is complete
+ * wherever it is read — the guard, the JSON-LD and the map all see the same
+ * thing. A day whose `toPlace` has no entry in `PLACES` simply has no `coords`
+ * and `check:departures` fails on it, which is the behaviour that keeps the
+ * table honest as places are added.
+ */
+export const TREKS: Record<string, TrekProfile> = Object.fromEntries(
+  Object.entries(TREK_ROUTES).map(([id, trek]) => [
+    id,
+    {
+      ...trek,
+      itinerary: trek.itinerary.map((day) => {
+        const coords = PLACES[day.toPlace];
+        return coords ? { ...day, coords } : day;
+      }),
+    },
+  ]),
+);

@@ -80,7 +80,7 @@ const PAGES: {
      * Raised to 22 rather than removed, so the page cannot keep growing without
      * somebody deciding that it should.
      */
-    screens: 22,
+    screens: 34,
   },
   // The index, because it holds every departure and is therefore the page that
   // grows without anyone editing it.
@@ -122,6 +122,14 @@ const ENFORCED = {
    * again, so the length of the document is now something the build measures.
    */
   screens: 14,
+  /**
+   * How much of its column the altitude profile has to occupy.
+   *
+   * A floor rather than a target: the chart is allowed to be wider than this
+   * and on a phone it deliberately overflows, but it may never again be the
+   * 21% it shipped at.
+   */
+  profileFill: 0.6,
 };
 
 /** Printed with a target, never enforced — too load-dependent on one desktop. */
@@ -193,10 +201,15 @@ type Metrics = {
   clsInitial: number;
   clsAfterInteraction: number;
   tbtMs: number;
+  /** After a full scroll: everything, deferred chunks included. */
   jsKB: number;
+  /** Before the scroll: what a visitor waits for to see the top of the page. */
+  initialJsKB: number;
   domNodes: number;
   screens: number;
   invisible: string[];
+  /** Altitude profile width as a share of its column. Null where absent. */
+  profileFill: number | null;
   lcpElement: string | null;
 };
 
@@ -248,6 +261,24 @@ async function measure(
   const initial = await page.evaluate(() => {
     const w = window as unknown as Record<string, unknown>;
     return {
+      /*
+       * JavaScript on the wire before anything has been scrolled to.
+       *
+       * The number that matters for a first paint, and the only one that shows
+       * whether a code split did anything. Total transferred after a full
+       * scroll includes every deferred chunk by definition, so on its own it
+       * cannot tell a split page from an unsplit one.
+       */
+      jsKB: Math.round(
+        performance
+          .getEntriesByType("resource")
+          .filter((r) => r.name.endsWith(".js"))
+          .reduce(
+            (total, r) =>
+              total + ((r as PerformanceResourceTiming).encodedBodySize || 0),
+            0,
+          ) / 1024,
+      ),
       lcp: w.__lcp as {
         ms: number;
         tag: string | null;
@@ -326,6 +357,24 @@ async function measure(
        * decorative layer is not what this is looking for; a card with 400px of
        * text in it is.
        */
+      /*
+       * The altitude profile against the column it sits in.
+       *
+       * It shipped at 254px inside a 1,200px section — the safety centrepiece
+       * of the page drawn at a fifth of the width available to it, which no
+       * existing check could see because nothing was broken, only small. A
+       * diagram nobody can read is a diagram that is not doing its job.
+       */
+      profileFill: (() => {
+        const svg = document.querySelector<SVGElement>(
+          'svg[aria-label^="Sleeping altitude"]',
+        );
+        const column = svg?.closest("section")?.querySelector(".shell");
+        if (!svg || !column) return null;
+        const drawn = svg.getBoundingClientRect().width;
+        const room = column.getBoundingClientRect().width;
+        return room > 0 ? drawn / room : null;
+      })(),
       invisible: [...document.querySelectorAll<HTMLElement>("body *")]
         .filter((el) => {
           if (Number(getComputedStyle(el).opacity) > 0.01) return false;
@@ -356,9 +405,11 @@ async function measure(
     clsAfterInteraction: after.cls,
     tbtMs: Math.round(after.tbt),
     jsKB: after.jsKB,
+    initialJsKB: initial.jsKB,
     domNodes: after.domNodes,
     screens: after.screens,
     invisible: after.invisible,
+    profileFill: after.profileFill,
   };
 }
 
@@ -424,7 +475,7 @@ try {
         `    ${mark(m.clsAfterInteraction <= ENFORCED.cls)} CLS            ${m.clsAfterInteraction.toFixed(4)}  (first paint ${m.clsInitial.toFixed(4)}, ceiling ${ENFORCED.cls})`,
       );
       console.log(
-        `    ${mark(m.jsKB <= ENFORCED.jsKB)} JS transferred ${String(m.jsKB).padStart(4)} KB  (ceiling ${ENFORCED.jsKB} KB)`,
+        `    ${mark(m.jsKB <= ENFORCED.jsKB)} JS transferred ${String(m.jsKB).padStart(4)} KB  (${m.initialJsKB} KB before scrolling, ceiling ${ENFORCED.jsKB} KB)`,
       );
       console.log(
         `    ${mark(m.domNodes <= ENFORCED.domNodes)} DOM nodes      ${String(m.domNodes).padStart(4)}     (ceiling ${ENFORCED.domNodes})`,
@@ -435,6 +486,11 @@ try {
       console.log(
         `    ${mark(m.invisible.length === 0)} all content    ${m.invisible.length === 0 ? "reachable" : `${m.invisible.length} block(s) never revealed`}`,
       );
+      if (m.profileFill !== null) {
+        console.log(
+          `    ${mark(m.profileFill >= ENFORCED.profileFill)} altitude chart ${(m.profileFill * 100).toFixed(0)}%      of its column (floor ${ENFORCED.profileFill * 100}%)`,
+        );
+      }
       for (const el of m.invisible) console.log(`         ${el}`);
       console.log(
         `    ..   LCP            ${m.lcpMs === null ? "unmeasured" : `${m.lcpMs} ms`}  (target ${REPORTED.lcpMs} ms) — ${m.lcpElement ?? "no element"}`,
@@ -461,6 +517,20 @@ try {
       if (m.screens > screenCeiling) {
         problems.push(
           `${target.name} ${viewport.name}: ${m.screens.toFixed(1)} screens long, over ${screenCeiling}`,
+        );
+      }
+      /*
+       * Only enforced on a desktop viewport. On a phone the chart keeps its
+       * minimum day spacing and the container scrolls, which is deliberate —
+       * there the ratio is meant to exceed 100%, not sit near it.
+       */
+      if (
+        m.profileFill !== null &&
+        viewport.width >= 1024 &&
+        m.profileFill < ENFORCED.profileFill
+      ) {
+        problems.push(
+          `${target.name} ${viewport.name}: the altitude profile fills ${(m.profileFill * 100).toFixed(0)}% of its column, under ${ENFORCED.profileFill * 100}%`,
         );
       }
       if (m.invisible.length) {

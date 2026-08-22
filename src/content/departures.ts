@@ -5,8 +5,18 @@ import {
   type CostSheet,
 } from "./cost-sheets.ts";
 import { TREKS, type ItineraryDay, type PhysicalDemand } from "./treks.ts";
+import {
+  GALLERIES,
+  PRACTICALITIES,
+  buildFaqs,
+  type Faq,
+  type GalleryImage,
+  type Practicalities,
+} from "./trek-detail.ts";
 
 export type { Contingency, CostLine, CostSheet };
+export type { Faq, GalleryImage, Practicalities };
+export { PLACES, type LatLon } from "./places.ts";
 export {
   RETURN_POINTS,
   TREKS,
@@ -100,6 +110,12 @@ export type Departure = {
   costSheetPdfHref: string;
   /** The itemised ledger. Its included lines sum to `priceUSD` exactly. */
   costSheet: CostSheet;
+  /** At least one `accommodation` and one `food` image. Guarded. */
+  gallery: GalleryImage[];
+  /** What it is actually like. Unglamorous by design. */
+  practicalities: Practicalities;
+  /** Departure-specific. Quotes this date's own numbers. */
+  faqs: Faq[];
   /** Anonymised. Country and count only. */
   groupSoFar: { country: string; count: number }[];
   image: { src: string; alt: string };
@@ -650,7 +666,7 @@ function compose(seed: Seed): Departure {
   const departs = new Date(`${seed.departsOn}T00:00:00Z`);
   const slug = `${seed.trekId}-${MONTH_SLUG[departs.getUTCMonth()]}-${departs.getUTCFullYear()}`;
 
-  return {
+  const composed: Departure = {
     ...seed,
     slug,
     trekName: trek.trekName,
@@ -682,7 +698,23 @@ function compose(seed: Seed): Departure {
       groupSizeMax: trek.groupSizeMax,
       singleSupplementUSD: seed.singleSupplementUSD,
     }),
+    gallery: GALLERIES[seed.trekId] ?? [],
+    practicalities: PRACTICALITIES[seed.trekId],
+    // Filled in below: the answers quote the cost sheet and the physical
+    // demand, so they cannot be built until the rest of the departure exists.
+    faqs: [],
   };
+
+  /*
+   * The FAQ reads the finished departure.
+   *
+   * Answers quote this date's price, supplement, minimum and decision date, so
+   * an FAQ cannot drift out of step with the cost sheet on the same page. That
+   * is only possible if the departure is complete before the answers are
+   * written, hence the second pass rather than a single object literal.
+   */
+  composed.faqs = buildFaqs(composed);
+  return composed;
 }
 
 export const departures: Departure[] = SEEDS.map(compose);
