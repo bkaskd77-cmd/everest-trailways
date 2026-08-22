@@ -5,6 +5,7 @@ import {
   type CostSheet,
 } from "./cost-sheets.ts";
 import { TREKS, type ItineraryDay, type PhysicalDemand } from "./treks.ts";
+import type { Focal } from "../lib/image-slots.ts";
 import {
   GALLERIES,
   PRACTICALITIES,
@@ -118,7 +119,11 @@ export type Departure = {
   faqs: Faq[];
   /** Anonymised. Country and count only. */
   groupSoFar: { country: string; count: number }[];
-  image: { src: string; alt: string };
+  /**
+   * The card photograph. `focal` is optional and only needed when the subject
+   * sits at an edge — see docs/IMAGE-SPEC.md.
+   */
+  image: { src: string; alt: string; focal?: Focal };
 };
 
 /* -------------------------------------------------------- price line items */
@@ -154,7 +159,7 @@ type Seed = {
   priceIncludes: string[];
   priceExcludes: string[];
   groupSoFar: { country: string; count: number }[];
-  image: { src: string; alt: string };
+  image: { src: string; alt: string; focal?: Focal };
 };
 
 /** Swap to "/departures/<id>.jpg" when real photography lands. */

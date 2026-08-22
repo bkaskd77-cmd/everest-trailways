@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "pnpm check:departures && pnpm check:trust && pnpm check:matcher && pnpm check:motion && pnpm check:links && pnpm check:security && next build",
+    "build": "pnpm check:departures && pnpm check:trust && pnpm check:matcher && pnpm check:motion && pnpm check:links && pnpm check:security && pnpm check:images && next build",
     "perf": "pnpm check:motion && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/measure-perf.ts",
     "start": "next start",
     "lint": "eslint",
@@ -24,7 +24,9 @@
     "prepare": "git config core.hooksPath .githooks || true",
     "scan:secrets": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/scan-secrets.ts",
     "check:security": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-security.ts",
-    "audit": "pnpm audit --prod --audit-level high"
+    "audit": "pnpm audit --prod --audit-level high",
+    "docs:images": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/build-image-spec.ts",
+    "check:images": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/build-image-spec.ts --check"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.117.1",

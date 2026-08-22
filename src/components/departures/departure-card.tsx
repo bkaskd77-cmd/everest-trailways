@@ -1,7 +1,7 @@
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, BadgeCheck, Users } from "lucide-react";
 
+import { SiteImage } from "@/components/site-image";
 import { AskPanel } from "@/components/departures/ask-panel";
 import { SeatMeter } from "@/components/departures/seat-meter";
 import { Button } from "@/components/ui/button";
@@ -110,22 +110,27 @@ export function DepartureCard({
       )}
     >
       {/* 1 — image */}
-      <div className="relative aspect-[4/3] overflow-hidden">
-        <Image
+      <div className="relative overflow-hidden">
+        {/*
+          The pointer parallax lives on `translate` and the hover on `scale` —
+          both independent transform properties, so neither clobbers the other.
+          The resting scale is what gives the 8px slide somewhere to go without
+          exposing an edge of the frame.
+        */}
+        <SiteImage
+          slot="departureCard"
           src={departure.image.src}
           alt={departure.image.alt}
-          fill
-          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-          quality={70}
-          // The pointer parallax lives on `translate` and the hover on `scale`
-          // — both independent transform properties, so neither clobbers the
-          // other. The resting scale is what gives the 8px slide somewhere to
-          // go without exposing an edge of the frame.
-          style={{ translate: "var(--par-x, 0px) var(--par-y, 0px)" }}
-          className={cn(
-            "scale-[1.06] object-cover transition-[scale,translate] duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]",
+          focal={departure.image.focal}
+          imageClassName={cn(
+            "scale-[1.06] transition-[scale,translate] duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]",
             !inactive && "group-hover:scale-[1.09]",
           )}
+        />
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{ translate: "var(--par-x, 0px) var(--par-y, 0px)" }}
         />
         <p
           className={cn(

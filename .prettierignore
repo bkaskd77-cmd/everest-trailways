@@ -3,3 +3,7 @@ node_modules
 pnpm-lock.yaml
 .vercel
 next-env.d.ts
+
+# Generated from src/lib/image-slots.ts by `pnpm docs:images`.
+# Formatting it here would make `pnpm check:images` fail against its own output.
+docs/IMAGE-SPEC.md

@@ -1,6 +1,6 @@
-import Image from "next/image";
-
+import { SiteImage } from "@/components/site-image";
 import type { GalleryImage } from "@/content/departures";
+import type { SlotName } from "@/lib/image-slots";
 import { cn } from "@/lib/utils";
 
 /**
@@ -22,14 +22,15 @@ import { cn } from "@/lib/utils";
 export function GalleryFrame({
   image,
   className,
-  sizes,
+  slot,
   priority,
   tone = "light",
   minimal = false,
 }: {
   image: GalleryImage;
   className?: string;
-  sizes: string;
+  /** Which slot in the registry this frame is filling. */
+  slot: SlotName;
   priority?: boolean;
   /**
    * Which way round the panel reads.
@@ -51,15 +52,17 @@ export function GalleryFrame({
 }) {
   if (image.src) {
     return (
-      <Image
+      <SiteImage
+        slot={slot}
         src={image.src}
         alt={image.alt}
-        fill
-        sizes={sizes}
-        quality={72}
+        focal={image.focal}
         priority={priority}
-        loading={priority ? undefined : "lazy"}
-        className={cn("object-cover", className)}
+        // The frame is positioned by its container in every use, so the slot's
+        // own aspect ratio is deliberately not applied here.
+        aspect={null}
+        className="absolute inset-0 h-full w-full"
+        imageClassName={className}
       />
     );
   }

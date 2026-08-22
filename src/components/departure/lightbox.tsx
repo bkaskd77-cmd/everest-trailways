@@ -120,7 +120,7 @@ export function Lightbox({
         <div className="relative min-h-0 flex-1">
           <GalleryFrame
             image={image}
-            sizes="(max-width: 1024px) 100vw, 1024px"
+            slot="galleryLightbox"
             tone="dark"
             className="object-contain"
           />

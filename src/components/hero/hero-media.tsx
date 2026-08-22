@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import Image from "next/image";
+
+import { IMAGE_SLOTS } from "@/lib/image-slots";
 import { useMotionValue, useTransform, type MotionValue } from "motion/react";
 
 import type { HeroSlide } from "@/content/hero-slides";
@@ -76,8 +78,14 @@ export function HeroMedia({
             src={slide.image.src}
             alt={slide.image.alt}
             fill
-            sizes="100vw"
-            quality={70}
+            // From the registry, so the homepage hero and the rest of the site
+            // cannot drift apart on the two numbers that decide which file a
+            // browser downloads. The slide keeps its own focal point, blur
+            // placeholder and filter, which is why this one image is not routed
+            // through <SiteImage>: those are hero-specific and the shared
+            // component would have to grow three props it needs nowhere else.
+            sizes={IMAGE_SLOTS.heroSlide.sizes}
+            quality={IMAGE_SLOTS.heroSlide.quality}
             loading={lcp ? "eager" : "lazy"}
             fetchPriority={lcp ? "high" : "auto"}
             placeholder={slide.image.blurDataURL ? "blur" : "empty"}

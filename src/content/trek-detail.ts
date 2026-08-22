@@ -29,6 +29,7 @@
  */
 
 import type { Departure } from "./departures.ts";
+import type { Focal } from "../lib/image-slots.ts";
 
 export type GalleryImage = {
   /**
@@ -48,6 +49,14 @@ export type GalleryImage = {
    */
   src?: string;
   alt: string;
+  /**
+   * Where to hold on when a crop has to lose something.
+   *
+   * Left unset the site keeps the middle of the frame, slightly high, which is
+   * right for most photographs. Set it when the subject is at an edge — one
+   * field, and it fixes the crop in every slot at once rather than per place.
+   */
+  focal?: Focal;
   /** Factual. What the traveller is looking at, not how to feel about it. */
   caption: string;
   category:

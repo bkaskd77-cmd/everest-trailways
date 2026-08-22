@@ -96,7 +96,7 @@ export function DepartureHeroSlider({
           >
             <GalleryFrame
               image={image}
-              sizes="100vw"
+              slot="departureHero"
               priority={i === 0}
               tone="dark"
               // The header prints the caption under the controls, so the panel
