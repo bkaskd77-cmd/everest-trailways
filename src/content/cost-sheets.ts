@@ -299,6 +299,16 @@ export type TrekFacts = {
    * sentence was written once for Everest and reused everywhere.
    */
   disruption: { place: string; kind: "flight" | "road" };
+  /**
+   * Who is actually paid for on this trip.
+   *
+   * The contingency promised an assistant guide on every trek and the staff
+   * cover note mentioned porters on trips that have none. Prose about people
+   * has to agree with the lines that pay them, so it reads the same source the
+   * ledger does.
+   */
+  hasAssistantGuide: boolean;
+  hasPorters: boolean;
 };
 
 /**
@@ -388,8 +398,11 @@ const ALTITUDE_CONTINGENCY = (facts: TrekFacts): Contingency => ({
       ? `, and the highest point reached on a walking day is ${facts.maxAltitudeM.toLocaleString("en-GB")} m`
       : ""
   }.`,
-  whatWeDo:
-    "The guide's decision to descend is final and is not negotiable at any price. An assistant guide goes down with you so the rest of the group continues. Descent on foot, the escort, and your accommodation lower down are ours.",
+  whatWeDo: `The guide's decision to descend is final and is not negotiable at any price. ${
+    facts.hasAssistantGuide
+      ? "An assistant guide goes down with you so the rest of the group continues."
+      : "The guide goes down with you, and the group comes down as well — there is one guide on this trip and nobody walks on unaccompanied."
+  } Descent on foot, the escort, and your accommodation lower down are ours.`,
   whoPays: "us",
   coveredByInsurance: "usually",
   note: "A helicopter evacuation, if a doctor calls for one, is billed to your insurer directly and is why the cover below is mandatory. We take no commission on evacuations.",
@@ -1229,6 +1242,8 @@ export function buildCostSheet(
     maxAltitudeM: trek.maxAltitudeM,
     gateway: costs.gateway,
     disruption: costs.disruption,
+    hasAssistantGuide: Boolean(costs.assistantGuideDays),
+    hasPorters: costs.trekkersPerPorter > 0,
   };
 
   // "1:4" — one guide to four trekkers, so each trekker carries a quarter of a
@@ -1281,7 +1296,16 @@ export function buildCostSheet(
     unitCount: costs.nights,
     unitLabel: "night",
     included: true,
-    note: "Twin share. A single room is an optional extra, not a surcharge.",
+    /*
+     * The fourth place that describes the single room, and the one step 8a
+     * missed. Practicalities, the extras table and the FAQ were all derived
+     * from `singleSupplementUSD`; this note still said a single was an optional
+     * extra on departures where none is offered and one is included free.
+     */
+    note:
+      input.singleSupplementUSD > 0
+        ? "Twin share. A single room is an optional extra, priced below, not a surcharge."
+        : "Twin share. Where the accommodation has a single room you get one at no extra cost — there is no supplement on this departure.",
     payableTo: "the teahouses and lodges, by us",
   });
 
@@ -1377,7 +1401,10 @@ export function buildCostSheet(
     amountUSD: STAFF_COVER_USD,
     basis: "per-person",
     included: true,
-    note: "Required by law for every guide and porter. Routinely omitted by operators competing on price.",
+    note:
+      costs.trekkersPerPorter > 0
+        ? "Required by law for every guide and porter. Routinely omitted by operators competing on price."
+        : "Required by law for every member of staff on the trip. Routinely omitted by operators competing on price.",
   });
 
   /* ---------------------------------------------------------- equipment */
@@ -1551,8 +1578,9 @@ export function buildCostSheet(
      */
     sharedCostPolicy: "we-absorb",
     tipping: {
-      guidance:
-        "Tipping is customary in Nepal and it is not included in the price above. We do not collect it, we do not add it to an invoice, and no member of staff will ask you for it. The range below is what groups commonly give across a whole trip, pooled and divided at the end.",
+      guidance: `Tipping is customary in Nepal and it is not included in the price above. We do not collect it, we do not add it to an invoice, and no member of staff will ask you for it. The range below is what groups commonly give across a whole trip, pooled and divided between ${
+        costs.trekkersPerPorter > 0 ? "the guides and porters" : "the staff"
+      } at the end.`,
       included: false,
       typicalRangeUSD: [round(input.days * 8), round(input.days * 14)],
     },

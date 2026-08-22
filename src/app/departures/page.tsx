@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { DepartureIndex } from "@/components/departure/departure-index";
 import { departureJsonLd } from "@/lib/departures-feed";
-import { departures } from "@/content/departures";
+import { bookableDepartures, departures } from "@/content/departures";
 import { siteConfig } from "@/lib/site";
 import { JsonLd } from "@/components/json-ld";
 
@@ -22,7 +22,17 @@ export const metadata: Metadata = {
  * JavaScript.
  */
 export default function DeparturesIndexPage() {
-  const jsonLd = departures.map((d) => departureJsonLd(d, siteConfig.url));
+  /*
+   * Bookable only, in the structured data as well as on the page.
+   *
+   * The cards were filtered and this was not, so an index that showed
+   * seventeen dates was describing nineteen trips to a machine, one of them
+   * cancelled and refunded. A page's structured data is a claim about what is
+   * on it.
+   */
+  const jsonLd = bookableDepartures().map((d) =>
+    departureJsonLd(d, siteConfig.url),
+  );
 
   return (
     <main className="bg-band-sunk">

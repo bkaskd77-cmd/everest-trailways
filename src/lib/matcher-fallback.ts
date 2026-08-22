@@ -1,6 +1,7 @@
 import {
   departureStatus,
   departures,
+  isBookable,
   formatDate,
   formatDateRange,
   seatsToGuarantee,
@@ -333,8 +334,15 @@ function monthOf(d: Departure): number {
 }
 
 function bookable(d: Departure, now: Date): boolean {
-  const status = departureStatus(d, now);
-  return status !== "full" && status !== "closed";
+  /*
+   * The lifecycle, not the fill state.
+   *
+   * This used to ask whether the seats were gone, which is a different question
+   * from whether the date still exists. A departure past its decision date and
+   * short of its minimum has been cancelled and refunded, and the matcher was
+   * still free to recommend it.
+   */
+  return isBookable(d, now);
 }
 
 /** One honest sentence that counts against the departure. Never empty. */

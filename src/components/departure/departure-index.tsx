@@ -7,6 +7,7 @@ import { DepartureCell } from "@/components/departures/departure-cell";
 import { StaggerGroup } from "@/components/motion";
 import {
   departureStatus,
+  isBookable,
   type Departure,
   type DepartureStatus,
 } from "@/content/departures";
@@ -117,6 +118,19 @@ function FilterRow({
 }
 
 export function DepartureIndex({ departures }: { departures: Departure[] }) {
+  /*
+   * Bookable only, whatever the caller passes.
+   *
+   * Filtered here rather than at the call site so a future page cannot list
+   * cancelled dates by forgetting to. A date that did not fill still has a page
+   * and is still reachable — it is not offered on a shelf of things to buy.
+   * The archive of those dates belongs on the trek page, where it is evidence
+   * rather than inventory.
+   */
+  const open = React.useMemo(
+    () => departures.filter((d) => isBookable(d)),
+    [departures],
+  );
   const [altitude, setAltitude] = React.useState(ALTITUDE[0].id);
   const [length, setLength] = React.useState(LENGTH[0].id);
   const [state, setState] = React.useState(STATE[0].id);
@@ -129,8 +143,8 @@ export function DepartureIndex({ departures }: { departures: Departure[] }) {
       pick(LENGTH, length),
       pick(STATE, state),
     ];
-    return departures.filter((d) => tests.every((t) => t.test(d)));
-  }, [departures, altitude, length, state]);
+    return open.filter((d) => tests.every((t) => t.test(d)));
+  }, [open, altitude, length, state]);
 
   const cleared =
     altitude === ALTITUDE[0].id &&
@@ -164,7 +178,7 @@ export function DepartureIndex({ departures }: { departures: Departure[] }) {
         aria-live="polite"
         className="mt-6 tabular text-sm text-muted-foreground"
       >
-        {shown.length} of {departures.length} departures
+        {shown.length} of {open.length} departures
         {!cleared && (
           <>
             {" · "}

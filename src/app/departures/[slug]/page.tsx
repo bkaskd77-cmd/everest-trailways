@@ -13,6 +13,9 @@ import {
   departureStatus,
   departures,
   formatDate,
+  isBookable,
+  isIndexable,
+  lifecycle,
   formatDateRange,
   formatGroup,
   highestSleep,
@@ -25,6 +28,7 @@ import { siteConfig } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import { JsonLd } from "@/components/json-ld";
 import { CostSheetSection } from "@/components/departure/cost-sheet-section";
+import { OutcomeBanner } from "@/components/departure/outcome-banner";
 import { RouteMap } from "@/components/departure/route-map";
 import { SectionHead } from "@/components/departure/section-head";
 import { faqJsonLd } from "@/lib/departures-feed";
@@ -91,6 +95,15 @@ export async function generateMetadata({
     title,
     description: departure.summary,
     alternates: { canonical: `/departures/${departure.slug}` },
+    /*
+     * A cancelled, departed or finished date is not a product and is not
+     * offered to a search engine as one. `follow` stays on: the links out of
+     * here — to the next date, to the trek — are still worth following, and
+     * nofollow would strand the page rather than de-list it.
+     */
+    robots: isIndexable(departure)
+      ? { index: true, follow: true }
+      : { index: false, follow: true },
     openGraph: {
       title: `${title} — ${siteConfig.name}`,
       description: departure.summary,
@@ -130,6 +143,19 @@ export default async function DeparturePage({
    * the same part of the country — not whatever costs about the same. They are
    * labelled as different treks, which is the whole point of showing them.
    */
+  const state = lifecycle(departure);
+  const openForBooking = state === "open";
+
+  /** The next date on this trek somebody could actually take instead. */
+  const nextBookable = departures
+    .filter(
+      (other) =>
+        other.trekId === departure.trekId &&
+        other.id !== departure.id &&
+        isBookable(other),
+    )
+    .sort((a, b) => a.departsOn.localeCompare(b.departsOn))[0];
+
   const sameTrek = departures
     .filter((other) => other.trekId === departure.trekId)
     .sort((a, b) => a.departsOn.localeCompare(b.departsOn));
@@ -164,6 +190,13 @@ export default async function DeparturePage({
           faqJsonLd(departure, siteConfig.url),
         ]}
       />
+
+      {/*
+        What happened to this date, before anything else on the page.
+        Above the header because somebody arriving from a search result has to
+        know inside one screen, and the header is a photograph.
+      */}
+      <OutcomeBanner departure={departure} nextDate={nextBookable} />
 
       {/* 1 — HEADER, and the gallery.
              The page used to open on one decided photograph and keep the
@@ -524,24 +557,32 @@ export default async function DeparturePage({
               id="closing-heading"
               className="max-w-[22ch] font-display text-3xl tracking-tight text-balance lg:text-4xl"
             >
-              {bookable
-                ? status === "needs-n"
-                  ? `${needed} more ${needed === 1 ? "booking" : "bookings"} and this date runs.`
-                  : "This date runs."
-                : "This date is closed to new bookings."}
+              {state === "cancelled"
+                ? "This date did not run."
+                : state === "departed"
+                  ? "This date is on the trail."
+                  : state === "completed"
+                    ? "This date has finished."
+                    : bookable
+                      ? status === "needs-n"
+                        ? `${needed} more ${needed === 1 ? "booking" : "bookings"} and this date runs.`
+                        : "This date runs."
+                      : "This date is closed to new bookings."}
             </h2>
             <p className="mt-4 max-w-[62ch] text-base text-muted-foreground">
-              {status === "needs-n"
-                ? `Decided on ${formatDate(departure.decisionDate)}, and you are told that day either way. If it does not reach ${departure.minimumToRun}, you are refunded in full.`
-                : bookable
-                  ? `${left} of ${departure.seatsTotal} seats remain, and the date runs regardless of whether they fill.`
-                  : "Ask us and we will tell you the next date on the same route, with the same guarantee."}
+              {!openForBooking
+                ? "Ask us and we will tell you the next date on the same route, with the same guarantee."
+                : status === "needs-n"
+                  ? `Decided on ${formatDate(departure.decisionDate)}, and you are told that day either way. If it does not reach ${departure.minimumToRun}, you are refunded in full.`
+                  : `${left} of ${departure.seatsTotal} seats remain, and the date runs regardless of whether they fill.`}
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-4">
               <Button asChild>
                 <Link href="#ask">
-                  {bookable ? "Ask about this date" : "Ask about the next date"}
+                  {openForBooking
+                    ? "Ask about this date"
+                    : "Ask about the next date"}
                 </Link>
               </Button>
               <Link

@@ -551,6 +551,52 @@ function sentence(text: string): string {
  * `hasSingleOption` is the single fact everything about single rooms comes
  * from: the practicalities line, the optional extra, and the FAQ answer.
  */
+/**
+ * The three practicality lines that talk about height.
+ *
+ * All three were shared prose citing thresholds a given trek may never reach.
+ * Poon Hill sleeps no higher than 2,874 m and tops out at 3,210 m, and its page
+ * explained what happens to showers above 4,000 m, priced charging "above about
+ * 3,000 m", and said lodge wifi exists "higher up" — higher than a route that
+ * does not go there.
+ *
+ * This is the same fault as the place names in 8a wearing different clothes: a
+ * sentence that names a number the departure does not reach is as wrong as one
+ * that names a village it does not visit. Derived from the trek's own two
+ * altitudes, so a threshold can only be mentioned if it is crossed.
+ */
+export function altitudeAwarePracticalities(
+  base: Practicalities,
+  facts: { highestSleepM: number; maxAltitudeM: number; teahouse: boolean },
+): Practicalities {
+  const m = (n: number) => `${n.toLocaleString("en-GB")} m`;
+  const { highestSleepM, maxAltitudeM, teahouse } = facts;
+
+  if (!teahouse) return base;
+
+  /* Showers. The threshold above which hot water stops being reliable. */
+  const showerLimit = 4000;
+  const showers =
+    highestSleepM >= showerLimit
+      ? `A hot shower is available most nights below ${m(showerLimit)} and costs $3–6, paid to the lodge. This trek sleeps above that, and up there it is a bucket of warm water if anything. Most people wash properly every third day and use wet wipes in between.`
+      : `A hot shower is available most nights on this route and costs $3–6, paid to the lodge — the highest you sleep is ${m(highestSleepM)}, which is below the line where hot water stops being dependable. It is heated by solar or by a wood boiler, so late afternoon is warmer than early morning.`;
+
+  /* Charging. Metered once supply is carried in rather than piped. */
+  const meteredFrom = 3000;
+  const electricity =
+    highestSleepM >= meteredFrom
+      ? `Charging is available at most lodges. Below ${m(meteredFrom)} it is usually free; above it, where power is solar or carried in, expect to pay $2–5 an hour at the lodge's meter. This trek sleeps as high as ${m(highestSleepM)}. Plugs are shared and there may be one socket for the room, so bring a power bank.`
+      : `Charging is available at every lodge on this route and is usually free or a dollar or two — this trek stays below ${m(meteredFrom)}, where power is still mains rather than solar. Plugs are shared and there may be one socket for the room, so a power bank saves queueing.`;
+
+  /* Signal. Coverage thins with height and distance from a road. */
+  const signal =
+    maxAltitudeM >= 4000
+      ? `Patchy. Ncell and NTC cover parts of the main valleys and there are stretches of a day or more with nothing, particularly above ${m(4000)}. Lodge wifi is sold by the hour or by the device, usually $3–5, and is often too slow to load a photograph.`
+      : `Reasonable for most of this route — it stays low enough and close enough to a road that Ncell and NTC reach most of the villages you sleep in. Expect gaps of a few hours rather than days. Lodge wifi is usually free or a dollar or two, and slow.`;
+
+  return { ...base, showers, electricity, signal };
+}
+
 export function roomSharingLine(d: Departure, teahouse: boolean): string {
   if (d.singleSupplementUSD > 0) {
     return teahouse
@@ -571,20 +617,45 @@ export function isTeahouseTrek(trekId: string): boolean {
   ].includes(trekId);
 }
 
+/** Does this departure actually pay for a second guide? */
+function hasAssistantGuide(d: Departure): boolean {
+  return d.costSheet.lines.some(
+    (line) => line.included && line.id === "staff-assistant",
+  );
+}
+
 export function buildFaqs(d: Departure): Faq[] {
   const single = d.costSheet.optionalExtras.find((e) => e.id === "single-room");
   const teahouse = isTeahouseTrek(d.trekId);
+  const assistant = hasAssistantGuide(d);
+  const porters = d.costSheet.lines.some(
+    (line) => line.included && line.id === "staff-porter",
+  );
 
   return [
     {
       question: "What if I cannot keep up?",
-      answer: `The group walks at the pace of its slowest member, and the itinerary is built with enough hours in the day that this is normal rather than a crisis. If you are consistently behind, the assistant guide walks with you and the rest go ahead to the next stop — nobody is left alone and nobody is hurried. If it becomes clear the route is beyond you, we take you down and you keep the guide. We do not charge extra for any of that.`,
+      /*
+       * Two answers used to promise an assistant guide on every departure. This
+       * one funds a guide, porters and staff insurance and no second guide, so
+       * the promise was for staff the cost sheet does not pay for — which is
+       * the same class of error as quoting a price the ledger does not reach.
+       */
+      answer: `The group walks at the pace of its slowest member, and the itinerary is built with enough hours in the day that this is normal rather than a crisis. ${
+        assistant
+          ? "If you are consistently behind, the assistant guide walks with you and the rest go ahead to the next stop — nobody is left alone and nobody is hurried."
+          : "If you are consistently behind, the guide walks with you and the group stays together rather than splitting — there is one guide on this trip, so the group moves at your pace rather than leaving you with somebody else."
+      } If it becomes clear the route is beyond you, we take you down and you keep the guide. We do not charge extra for any of that.`,
     },
     {
       question: "What if I get altitude sickness?",
       answer:
         d.maxAltitudeM >= 3000
-          ? `The guide checks symptoms daily and carries a pulse oximeter. Mild symptoms are common and usually pass with a rest day. If the guide decides you must descend, that decision is final and is not negotiable at any price — an assistant guide goes down with you so the group continues. Descent on foot, the escort and your accommodation lower down are ours. A helicopter evacuation, if a doctor calls for one, is billed to your insurer, which is why the cover on this page is mandatory. We take no commission on evacuations.`
+          ? `The guide checks symptoms daily and carries a pulse oximeter. Mild symptoms are common and usually pass with a rest day. If the guide decides you must descend, that decision is final and is not negotiable at any price. ${
+              assistant
+                ? "An assistant guide goes down with you so the group continues."
+                : "The guide goes down with you and the group comes down too — there is one guide on this trip, and nobody walks on unaccompanied."
+            } Descent on foot, the escort and your accommodation lower down are ours. A helicopter evacuation, if a doctor calls for one, is billed to your insurer, which is why the cover on this page is mandatory. We take no commission on evacuations.`
           : `This trip reaches ${d.maxAltitudeM.toLocaleString("en-GB")} m, which is below the altitude at which altitude sickness is a normal concern. The guide still checks how everybody is each day.`,
     },
     {
@@ -639,7 +710,7 @@ export function buildFaqs(d: Departure): Faq[] {
     },
     {
       question: "Do I need to tip, and how much?",
-      answer: `Tipping is customary in Nepal and it is not included in the price. We do not collect it, we do not add it to an invoice, and no member of staff will ask you for it. Groups on a trip this length commonly give ${money(d.costSheet.tipping.typicalRangeUSD[0])}–${money(d.costSheet.tipping.typicalRangeUSD[1])} per person in total, pooled and divided between the guides and porters at the end.`,
+      answer: `Tipping is customary in Nepal and it is not included in the price. We do not collect it, we do not add it to an invoice, and no member of staff will ask you for it. Groups on a trip this length commonly give ${money(d.costSheet.tipping.typicalRangeUSD[0])}–${money(d.costSheet.tipping.typicalRangeUSD[1])} per person in total, pooled and divided between ${porters ? "the guides and porters" : "the staff"} at the end.`,
     },
   ];
 }

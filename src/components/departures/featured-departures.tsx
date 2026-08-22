@@ -3,7 +3,7 @@ import { ArrowRight } from "lucide-react";
 
 import { DepartureGrid } from "@/components/departures/departure-grid";
 import { Reveal } from "@/components/motion";
-import { departures } from "@/content/departures";
+import { bookableDepartures, departures } from "@/content/departures";
 import { departureJsonLd } from "@/lib/departures-feed";
 import { siteConfig } from "@/lib/site";
 import { JsonLd } from "@/components/json-ld";
@@ -25,7 +25,9 @@ const FEATURED_COUNT = 6;
  */
 function featured() {
   const seen = new Set<string>();
-  return [...departures]
+  // Bookable only. A cancelled date on the homepage is an advertisement for
+  // something that does not exist.
+  return [...bookableDepartures()]
     .sort((a, b) => a.departsOn.localeCompare(b.departsOn))
     .filter((d) => {
       if (seen.has(d.trekId)) return false;

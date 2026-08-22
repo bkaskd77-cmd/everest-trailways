@@ -9,6 +9,7 @@ import type { Focal } from "../lib/image-slots.ts";
 import {
   GALLERIES,
   PRACTICALITIES,
+  altitudeAwarePracticalities,
   buildFaqs,
   isTeahouseTrek,
   roomSharingLine,
@@ -727,16 +728,82 @@ function compose(seed: Seed): Departure {
    * sections of one page disagreed about whether a single room was an option,
    * an extra, or included. One fact, three sentences derived from it.
    */
-  composed.practicalities = {
-    ...composed.practicalities,
-    roomSharing: roomSharingLine(composed, isTeahouseTrek(seed.trekId)),
-  };
+  const teahouse = isTeahouseTrek(seed.trekId);
+  composed.practicalities = altitudeAwarePracticalities(
+    {
+      ...composed.practicalities,
+      roomSharing: roomSharingLine(composed, teahouse),
+    },
+    {
+      highestSleepM: Math.max(
+        ...trek.itinerary.map((day) => day.sleepAltitudeM),
+      ),
+      maxAltitudeM: trek.maxAltitudeM,
+      teahouse,
+    },
+  );
 
   composed.faqs = buildFaqs(composed);
   return composed;
 }
 
 export const departures: Departure[] = SEEDS.map(compose);
+
+/* -------------------------------------------------------------- lifecycle */
+
+/**
+ * Where a departure is in its life, as against how full it is.
+ *
+ * `departureStatus` answers "how is it selling"; this answers "does it still
+ * exist as a thing you can buy". They were the same question for as long as
+ * every date was in the future, and then the first one passed its decision date
+ * without filling — and the page went on being indexed as a purchasable product,
+ * with a full cost sheet and an in-stock offer, for a trip that had been
+ * cancelled and refunded.
+ *
+ * That is worse than an ordinary stale page. This site's entire argument is
+ * that a published minimum is a real threshold; leaving a cancelled date
+ * looking bookable makes the threshold look decorative.
+ *
+ * Always derived, never stored. A stored lifecycle is a lifecycle somebody has
+ * to remember to update, on exactly the day nobody is thinking about it.
+ */
+export type Lifecycle =
+  "open" | "closed" | "cancelled" | "departed" | "completed";
+
+export function lifecycle(d: Departure, now: Date = new Date()): Lifecycle {
+  const departs = new Date(`${d.departsOn}T00:00:00Z`).getTime();
+  const returns = new Date(`${d.returnsOn}T23:59:59Z`).getTime();
+  const decided = new Date(`${d.decisionDate}T00:00:00Z`).getTime();
+  const t = now.getTime();
+
+  // Order matters: a trip that ran and came back is completed whatever else
+  // was true of it along the way.
+  if (t > returns) return "completed";
+  if (t >= departs) return "departed";
+  if (t >= decided && d.seatsBooked < d.minimumToRun) return "cancelled";
+  if (d.seatsBooked >= d.seatsTotal) return "closed";
+  return "open";
+}
+
+/** Can somebody still join this date? The only test any listing should use. */
+export const isBookable = (d: Departure, now: Date = new Date()) =>
+  lifecycle(d, now) === "open";
+
+/**
+ * Should a search engine index this page?
+ *
+ * A cancelled, departed or completed date is not a product. It stays reachable
+ * — deleting it would be the dishonest choice, and the cancelled ones are the
+ * best evidence the guarantee is real — but it is not offered up as something
+ * to buy.
+ */
+export const isIndexable = (d: Departure, now: Date = new Date()) =>
+  ["open", "closed"].includes(lifecycle(d, now));
+
+/** Departures a visitor can actually book, for every grid and list. */
+export const bookableDepartures = (now: Date = new Date()) =>
+  departures.filter((d) => isBookable(d, now));
 
 /* ---------------------------------------------------------------- derived */
 

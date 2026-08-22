@@ -8,6 +8,7 @@ import * as m from "motion/react-m";
 import { Button } from "@/components/ui/button";
 import {
   departureStatus,
+  isBookable,
   formatDateRange,
   seatsRemaining,
   seatsToGuarantee,
@@ -41,7 +42,13 @@ export function GlanceBar({
   const status = departureStatus(departure);
   const left = seatsRemaining(departure);
   const needed = seatsToGuarantee(departure);
-  const bookable = status !== "full" && status !== "closed";
+  /*
+   * The bar exists to keep the decision in view while somebody reads. On a date
+   * that cannot be taken there is no decision to keep in view, and a sticky
+   * price with a seat count is an advertisement for something that does not
+   * exist — so it does not render at all.
+   */
+  const openForBooking = isBookable(departure);
 
   React.useEffect(() => {
     const sentinel = document.getElementById(sentinelId);
@@ -53,6 +60,9 @@ export function GlanceBar({
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [sentinelId]);
+
+  // Nothing to keep in view on a date nobody can take.
+  if (!openForBooking) return null;
 
   return (
     <div className="sticky top-0 z-40">
@@ -95,7 +105,9 @@ export function GlanceBar({
 
               <Button asChild size="sm">
                 <Link href="#ask">
-                  {bookable ? "Ask about this date" : "Ask about the next date"}
+                  {openForBooking
+                    ? "Ask about this date"
+                    : "Ask about the next date"}
                 </Link>
               </Button>
             </div>

@@ -20,9 +20,14 @@ import { BANNED_ADJECTIVES } from "../src/content/trust-points.ts";
 import { PLACES } from "../src/content/places.ts";
 import { TREK_NAMED_PLACES } from "../src/content/cost-sheets.ts";
 import { costSheetPdf, pdfLedgerTotal } from "../src/lib/cost-sheet-pdf.ts";
+import { departureJsonLd } from "../src/lib/departures-feed.ts";
 import {
   RETURN_POINTS,
+  bookableDepartures,
   departures,
+  isBookable,
+  isIndexable,
+  lifecycle,
   departureStatus,
   guaranteeMeta,
   itineraryHighPoint,
@@ -848,6 +853,100 @@ for (const d of departures) {
   }
 }
 
+/* ---------------------------------------------------------- lifecycle */
+
+/*
+ * A date that cannot be bought must not look like one that can.
+ *
+ * One departure passed its decision date three bookings short, everybody was
+ * refunded, and its page stayed live: indexed, priced, with a full cost sheet
+ * and an in-stock offer. That is worse than an ordinary stale page. The whole
+ * argument of this site is that a published minimum is a real threshold, and a
+ * cancelled date still advertising itself makes the threshold look decorative.
+ *
+ * The page stays reachable — deleting it would be the dishonest fix, and a date
+ * that did not fill is the best evidence the guarantee is real. It just stops
+ * pretending to be for sale.
+ */
+for (const d of departures) {
+  const state = lifecycle(d, now);
+  const jsonLd = departureJsonLd(d, "https://everest-trailways.vercel.app");
+  const offer = (jsonLd as { offers?: { availability?: string } }).offers;
+
+  if (state === "cancelled" && offer) {
+    fail(
+      d.id,
+      "cancelled-offer",
+      "a cancelled departure still emits an Offer — there is no price at which it can be bought",
+    );
+  }
+  if (state !== "open" && offer?.availability?.includes("InStock")) {
+    fail(
+      d.id,
+      "stale-instock",
+      `lifecycle is "${state}" but the structured data says InStock`,
+    );
+  }
+  if (
+    !isIndexable(d, now) &&
+    !["cancelled", "departed", "completed"].includes(state)
+  ) {
+    fail(
+      d.id,
+      "lifecycle",
+      `"${state}" is neither indexable nor accounted for`,
+    );
+  }
+  if (isBookable(d, now) !== (state === "open")) {
+    fail(d.id, "lifecycle", "isBookable disagrees with the lifecycle");
+  }
+}
+
+/*
+ * And nothing that lists departures for sale may include one that is not.
+ *
+ * Checked against the module the pages actually use rather than against the
+ * pages, so a new grid built on `bookableDepartures` inherits the rule and a
+ * new grid built on `departures` fails the moment a date lapses.
+ */
+for (const d of bookableDepartures(now)) {
+  if (lifecycle(d, now) !== "open") {
+    fail(
+      d.id,
+      "bookable-listing",
+      "appears in the bookable set but is not open",
+    );
+  }
+}
+
+const listings = [
+  "src/components/departures/featured-departures.tsx",
+  "src/components/departure/departure-index.tsx",
+  // The index page's structured data is a listing too: it tells a machine what
+  // is on the page, and it was describing nineteen trips on a page showing
+  // seventeen.
+  "src/app/departures/page.tsx",
+];
+for (const listing of listings) {
+  const source = await readFile(path.join(process.cwd(), listing), "utf8");
+  /*
+   * Imports do not count.
+   *
+   * This looked for the name anywhere in the file, which an unused import
+   * satisfies — deleting the filter and leaving the import behind passed the
+   * check. The mutation test caught it. Import lines are stripped before the
+   * file is searched, so the name has to be used.
+   */
+  const body = source.replace(/^import[\s\S]*?from\s+["'][^"']+["'];$/gm, "");
+  if (!/bookableDepartures\(|isBookable\(/.test(body)) {
+    fail(
+      "section",
+      "bookable-listing",
+      `${listing} lists departures without filtering to the bookable ones`,
+    );
+  }
+}
+
 /* ------------------------------------------------- regional boilerplate */
 
 /*
@@ -979,6 +1078,80 @@ for (const d of departures) {
         id,
         "foreign-place",
         `${where} names "${place}", which is not on this trek — shared prose must not name a location`,
+      );
+    }
+  }
+
+  /* -------------------------------------------- altitudes never reached */
+
+  /*
+   * A sentence may not cite a height this departure does not go to.
+   *
+   * Poon Hill sleeps no higher than 2,874 m and tops out at 3,210 m, and its
+   * page explained what happens to showers above 4,000 m, priced charging
+   * "above about 3,000 m", and said lodge wifi exists "higher up". All three
+   * were shared prose carrying a threshold from a bigger trek — the same fault
+   * as the place names caught in 8a, wearing a number instead of a village.
+   *
+   * The rule is the same shape: a threshold may only be mentioned by a
+   * departure that crosses it. A little headroom is allowed, because "common
+   * above 3,000 m" is a fact about altitude illness rather than a claim about
+   * this route, and refusing it would push a genuine safety sentence off the
+   * page.
+   */
+  const CONTEXT_ALLOWANCE_M = 300;
+  const altitudeClaim = /\b([1-9][,.]?\d{3})\s?m\b/g;
+
+  for (const [where, text] of rendered) {
+    for (const match of text.matchAll(altitudeClaim)) {
+      const cited = Number(match[1].replace(/[,.]/g, ""));
+      // Below 2,000 m is a distance or a village height, not a threshold.
+      if (cited < 2000) continue;
+      if (cited <= d.maxAltitudeM + CONTEXT_ALLOWANCE_M) continue;
+      fail(
+        id,
+        "altitude-never-reached",
+        `${where} cites ${cited} m, and this trek never goes above ${d.maxAltitudeM} m`,
+      );
+    }
+  }
+
+  /* ------------------------------------------------ staff who are not paid */
+
+  /*
+   * A page may not promise a role the cost sheet does not fund.
+   *
+   * Two FAQ answers promised an assistant guide on every departure — "the
+   * assistant guide walks with you", "an assistant guide goes down with you so
+   * the group continues" — including departures whose staff lines are a guide,
+   * porters and insurance and nothing else. Promising staff that nobody is paid
+   * for is the same error as quoting a price the ledger does not reach, made in
+   * the section where somebody is asking what happens if they cannot cope.
+   */
+  const STAFF_ROLES: [string, RegExp, string][] = [
+    ["assistant guide", /assistant guide/i, "staff-assistant"],
+    ["porter", /\bporters?\b/i, "staff-porter"],
+  ];
+
+  for (const [role, mention, lineId] of STAFF_ROLES) {
+    const funded = d.costSheet.lines.some(
+      (line) => line.included && line.id === lineId,
+    );
+    if (funded) continue;
+    for (const [where, text] of rendered) {
+      // A sentence saying there is no such person is not a promise of one.
+      if (!mention.test(text)) continue;
+      if (
+        /no (?:second guide|assistant|porters?)|one guide on this trip|there are no porters/i.test(
+          text,
+        )
+      ) {
+        continue;
+      }
+      fail(
+        id,
+        "unfunded-staff",
+        `${where} mentions a ${role}, and no ${lineId} line pays for one`,
       );
     }
   }

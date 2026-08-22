@@ -306,6 +306,15 @@ export function DepartureHeroSlider({
             */}
             <span className="mb-1 block text-xs tracking-[0.14em] text-glacier/60 uppercase">
               {CATEGORY_LABEL[current.category]}
+              {/*
+                A real separator in the text, not only a line break in the
+                layout. `display: block` puts these on two lines on screen, and
+                `textContent` still ran them together — "Where you sleepA
+                standard twin teahouse room" — which is what a scraper, a
+                translation tool or anything reading the DOM as a string gets.
+                Two characters, and the string reads correctly everywhere.
+              */}
+              <span className="sr-only">: </span>
             </span>
             <span className="block">{current.caption}</span>
           </p>

@@ -5,8 +5,11 @@ import {
   departures,
   formatDate,
   highestSleep,
+  isBookable,
+  lifecycle,
   seatsRemaining,
   seatsToGuarantee,
+  type Lifecycle,
 } from "../content/departures.ts";
 
 /**
@@ -21,6 +24,8 @@ import {
 export type FeedDeparture = {
   id: string;
   slug: string;
+  lifecycle: string;
+  bookable: boolean;
   trekId: string;
   trekName: string;
   region: string;
@@ -52,6 +57,10 @@ export type FeedDeparture = {
 const DOCS: Record<string, string> = {
   id: "Stable identifier for this departure. Never reused.",
   slug: "The public URL segment for this departure. Use bookingUrl to link.",
+  lifecycle:
+    "open, closed, cancelled, departed or completed. Derived from the dates and the booking count, never set by hand.",
+  bookable:
+    "True only when lifecycle is open. Anything else cannot be bought at any price.",
   trekId: "Identifier of the trek this departure belongs to.",
   trekName: "Human-readable trek name.",
   region: "Region of Nepal, e.g. Khumbu, Annapurna, Langtang, Mustang, Terai.",
@@ -95,6 +104,15 @@ export function buildFeed(origin: string) {
   const entries: FeedDeparture[] = departures.map((d) => ({
     id: d.id,
     slug: d.slug,
+    /*
+     * Kept in the feed, marked for what it is.
+     *
+     * Removing cancelled dates would hide the only evidence that the published
+     * minimum is a real threshold. A reader — human or machine — gets the whole
+     * set and an explicit field saying which are on sale.
+     */
+    lifecycle: lifecycle(d, now),
+    bookable: isBookable(d, now),
     trekId: d.trekId,
     trekName: d.trekName,
     region: d.region,
@@ -156,6 +174,29 @@ export function buildFeed(origin: string) {
   };
 }
 
+/**
+ * Availability, from the lifecycle.
+ *
+ * A cancelled date emitted `InStock` alongside a full price and a cost sheet,
+ * which is a machine-readable claim that it can be bought. It cannot: the
+ * minimum was not met and everybody was refunded. Schema.org has words for
+ * this and we should use them.
+ */
+function availabilityFor(state: Lifecycle): string | null {
+  switch (state) {
+    case "open":
+      return "https://schema.org/InStock";
+    case "closed":
+      return "https://schema.org/SoldOut";
+    case "cancelled":
+      // No offer at all. There is nothing on sale and nothing that was.
+      return null;
+    default:
+      // Departed or completed: it existed, it is over.
+      return "https://schema.org/Discontinued";
+  }
+}
+
 /** schema.org TouristTrip + Offer for one departure. */
 /**
  * The full structured record for one departure page.
@@ -172,11 +213,8 @@ export function departureJsonLd(
 ) {
   const absolute = (path: string) => new URL(path, origin).toString();
   const url = absolute(`/departures/${d.slug}`);
-  const status = departureStatus(d);
-  const availability =
-    status === "full" || status === "closed"
-      ? "https://schema.org/SoldOut"
-      : "https://schema.org/InStock";
+  const state = lifecycle(d);
+  const availability = availabilityFor(state);
 
   return {
     "@context": "https://schema.org",
@@ -211,26 +249,47 @@ export function departureJsonLd(
         },
       })),
     },
-    offers: {
-      "@type": "Offer",
-      "@id": `${url}#offer`,
-      price: d.priceUSD.toFixed(2),
-      priceCurrency: "USD",
-      availability,
-      inventoryLevel: {
-        "@type": "QuantitativeValue",
-        value: seatsRemaining(d),
-        unitText: "seats",
-      },
-      url,
-      validFrom: d.guaranteedAt ?? d.decisionDate,
-      validThrough: d.departsOn,
-      priceSpecification: {
-        "@type": "PriceSpecification",
-        price: d.priceUSD.toFixed(2),
-        priceCurrency: "USD",
-        valueAddedTaxIncluded: true,
-      },
+    /*
+     * A cancelled date has no offer at all.
+     *
+     * Not an offer marked unavailable — none. The trip did not reach its
+     * minimum, everybody was refunded, and there is no price at which it can be
+     * bought. Publishing a priced Offer with an "out of stock" flag would still
+     * be telling an aggregator this is a product.
+     */
+    ...(availability === null
+      ? {}
+      : {
+          offers: {
+            "@type": "Offer",
+            "@id": `${url}#offer`,
+            price: d.priceUSD.toFixed(2),
+            priceCurrency: "USD",
+            availability,
+            inventoryLevel: {
+              "@type": "QuantitativeValue",
+              value: seatsRemaining(d),
+              unitText: "seats",
+            },
+            url,
+            validFrom: d.guaranteedAt ?? d.decisionDate,
+            validThrough: d.departsOn,
+            priceSpecification: {
+              "@type": "PriceSpecification",
+              price: d.priceUSD.toFixed(2),
+              priceCurrency: "USD",
+              valueAddedTaxIncluded: true,
+            },
+          },
+        }),
+    /*
+     * The lifecycle, stated. An aggregator that ignores availability can still
+     * read this and know the trip did not run.
+     */
+    additionalProperty: {
+      "@type": "PropertyValue",
+      name: "lifecycle",
+      value: state,
     },
     provider: {
       "@type": "Organization",
