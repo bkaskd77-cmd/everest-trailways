@@ -220,19 +220,28 @@ export function originAllowed(request: Request, siteUrl: string): boolean {
     return false;
   }
 
-  const allowed = new Set<string>([new URL(siteUrl).host]);
-  if (process.env.NODE_ENV !== "production") {
-    allowed.add("localhost:3000");
-    allowed.add("localhost:3002");
-    allowed.add("localhost:3003");
-    allowed.add("127.0.0.1:3000");
-    allowed.add("127.0.0.1:3002");
-    allowed.add("127.0.0.1:3003");
-  }
-  // Vercel preview deployments are ours and change name every push.
+  // Ours, on the canonical domain.
+  if (host === new URL(siteUrl).host) return true;
+
+  // Vercel preview deployments are ours and change name on every push.
   if (host.endsWith(".vercel.app")) return true;
 
-  return allowed.has(host);
+  /*
+   * Any loopback address outside production, on any port.
+   *
+   * Listing ports here was a small trap: `pnpm start` runs with NODE_ENV set to
+   * production, and a hardcoded 3000/3002/3003 meant a local production build
+   * on any other port refused its own front end — which reads as a broken
+   * matcher rather than as a working origin check.
+   */
+  if (process.env.NODE_ENV !== "production") {
+    const name = host.split(":")[0];
+    if (name === "localhost" || name === "127.0.0.1" || name === "[::1]") {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /** Test seam. Never called by a route. */
