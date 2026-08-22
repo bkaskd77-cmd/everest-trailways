@@ -2,7 +2,13 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Pause,
+  Play,
+} from "lucide-react";
 
 import { GalleryFrame } from "@/components/departure/gallery-frame";
 import type { GalleryImage } from "@/content/departures";
@@ -38,6 +44,16 @@ const CATEGORY_LABEL: Record<GalleryImage["category"], string> = {
   landscape: "The country",
 };
 
+/**
+ * How long each photograph holds.
+ *
+ * Seven seconds. Long enough to read a two-line caption without hurrying, short
+ * enough that somebody who is not going to touch anything still sees the room
+ * and the plate before they scroll past. A carousel that moves faster than its
+ * own captions can be read is a carousel that is only decorating.
+ */
+const HOLD_MS = 7000;
+
 export function DepartureHeroSlider({
   images,
   region,
@@ -52,6 +68,55 @@ export function DepartureHeroSlider({
 }) {
   const track = React.useRef<HTMLUListElement>(null);
   const [index, setIndex] = React.useState(0);
+
+  /*
+   * Autoplay, and the four things that have to be true for it to be acceptable.
+   *
+   * An auto-advancing carousel is content that moves without being asked, which
+   * is a problem for anybody who reads slowly, uses a screen magnifier, or is
+   * made ill by motion. It is only defensible with all of the following, and
+   * each one is a separate mechanism rather than a variation on the same one:
+   *
+   *   1. It never starts under `prefers-reduced-motion`. Not slower — never.
+   *   2. It pauses while a pointer is over it or focus is inside it, so reading
+   *      a caption cannot be interrupted by the thing you are reading.
+   *   3. It pauses when the header is off screen or the tab is hidden, so it is
+   *      not advancing through photographs nobody is looking at.
+   *   4. There is a visible pause control. WCAG 2.2.2 asks for a mechanism, and
+   *      hover is not a mechanism on a touchscreen.
+   *
+   * Manual use pauses it too — pressing an arrow and then being moved on four
+   * seconds later is the carousel arguing with you.
+   */
+  const [playing, setPlaying] = React.useState(false);
+  const [held, setHeld] = React.useState(false);
+  const [onScreen, setOnScreen] = React.useState(true);
+  const shell = React.useRef<HTMLElement>(null);
+
+  React.useEffect(() => {
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const apply = () => setPlaying(!query.matches);
+    apply();
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, []);
+
+  React.useEffect(() => {
+    const node = shell.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setOnScreen(entry.isIntersecting),
+      { threshold: 0.25 },
+    );
+    observer.observe(node);
+
+    const onVisibility = () => setOnScreen(!document.hidden);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
 
   const onScroll = React.useCallback(() => {
     const node = track.current;
@@ -79,10 +144,25 @@ export function DepartureHeroSlider({
     [images.length],
   );
 
+  const running = playing && !held && onScreen && images.length > 1;
+
+  React.useEffect(() => {
+    if (!running) return;
+    const timer = window.setInterval(() => goTo(index + 1), HOLD_MS);
+    return () => window.clearInterval(timer);
+  }, [running, index, goTo]);
+
   const current = images[index];
 
   return (
-    <header className="relative isolate min-h-[74svh] overflow-hidden bg-summit text-glacier">
+    <header
+      ref={shell}
+      onMouseEnter={() => setHeld(true)}
+      onMouseLeave={() => setHeld(false)}
+      onFocusCapture={() => setHeld(true)}
+      onBlurCapture={() => setHeld(false)}
+      className="relative isolate min-h-[74svh] overflow-hidden bg-summit text-glacier"
+    >
       <ul
         ref={track}
         onScroll={onScroll}
@@ -133,7 +213,10 @@ export function DepartureHeroSlider({
         <div className="shell flex flex-wrap items-center gap-x-4 gap-y-3 pb-8">
           <button
             type="button"
-            onClick={() => goTo(index - 1)}
+            onClick={() => {
+              setPlaying(false);
+              goTo(index - 1);
+            }}
             className="inline-flex size-11 cursor-pointer items-center justify-center rounded-full bg-glacier/15 text-glacier backdrop-blur-sm transition-colors hover:bg-glacier/25"
           >
             <ChevronLeft aria-hidden className="size-5" />
@@ -141,12 +224,42 @@ export function DepartureHeroSlider({
           </button>
           <button
             type="button"
-            onClick={() => goTo(index + 1)}
+            onClick={() => {
+              setPlaying(false);
+              goTo(index + 1);
+            }}
             className="inline-flex size-11 cursor-pointer items-center justify-center rounded-full bg-glacier/15 text-glacier backdrop-blur-sm transition-colors hover:bg-glacier/25"
           >
             <ChevronRight aria-hidden className="size-5" />
             <span className="sr-only">Next photograph</span>
           </button>
+
+          {/*
+            The pause control. Visible, not hover-only: a touchscreen has no
+            hover, and WCAG 2.2.2 asks for a mechanism rather than a behaviour.
+            Under reduced motion it shows as a play control rather than
+            disappearing: nothing moves until somebody asks for it, and asking
+            has to remain possible.
+          */}
+          {images.length > 1 && (
+            <button
+              type="button"
+              onClick={() => setPlaying((was) => !was)}
+              aria-pressed={!playing}
+              className="inline-flex size-11 cursor-pointer items-center justify-center rounded-full bg-glacier/15 text-glacier backdrop-blur-sm transition-colors hover:bg-glacier/25"
+            >
+              {playing ? (
+                <Pause aria-hidden className="size-4" />
+              ) : (
+                <Play aria-hidden className="size-4" />
+              )}
+              <span className="sr-only">
+                {playing
+                  ? "Pause the photographs"
+                  : "Play the photographs automatically"}
+              </span>
+            </button>
+          )}
 
           {/* Dots, one per photograph, each a target of its own. */}
           <ul className="flex items-center gap-2">
@@ -154,7 +267,10 @@ export function DepartureHeroSlider({
               <li key={`dot-${i}`}>
                 <button
                   type="button"
-                  onClick={() => goTo(i)}
+                  onClick={() => {
+                    setPlaying(false);
+                    goTo(i);
+                  }}
                   aria-current={i === index ? "true" : undefined}
                   className={cn(
                     "block h-1.5 cursor-pointer rounded-full transition-all duration-300",

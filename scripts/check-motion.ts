@@ -170,6 +170,38 @@ for (const file of files) {
       );
     }
   }
+
+  /*
+   * A timer that advances something is a loop too.
+   *
+   * The rule above only sees Motion's own `repeat: Infinity`, so an
+   * autoplaying carousel driven by `setInterval` walked straight past a guard
+   * whose stated principle is that exactly one thing loops forever. Content
+   * that moves without being asked is the thing the principle is about, not the
+   * API that happens to move it.
+   *
+   * So a timer loop is allowed, and it has to carry all four of the conditions
+   * that make one acceptable. Each is a distinct mechanism: hover is not a
+   * substitute for a button on a touchscreen, and a button is not a substitute
+   * for honouring reduced motion.
+   */
+  for (const match of source.matchAll(/setInterval\(/g)) {
+    const line = source.slice(0, match.index).split("\n").length;
+    const required: [string, RegExp][] = [
+      ["honour prefers-reduced-motion", /prefers-reduced-motion/],
+      ["pause on hover or focus", /onMouseEnter|onFocusCapture/],
+      ["pause when off screen", /IntersectionObserver|visibilitychange/],
+      ["offer a visible pause control", /aria-pressed/],
+    ];
+    for (const [what, pattern] of required) {
+      if (!pattern.test(source)) {
+        fail(
+          "unpausable-loop",
+          `${rel}:${line} advances on a timer but does not ${what}`,
+        );
+      }
+    }
+  }
 }
 
 if (tagged === 0) {
@@ -193,7 +225,9 @@ console.log(`  ok    ${tagged} animated elements carry data-motion`);
 console.log(
   `  ok    ${pinned} more are pinned by name in the reduced-motion block (${[...pinnedByName].join(", ")})`,
 );
-console.log("  ok    one infinite loop, and it is the scroll cue");
+console.log(
+  "  ok    one infinite loop, and it is the scroll cue; every timer loop pauses four ways",
+);
 
 if (problems.length) {
   console.log("\n  Problems:");
