@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import Image from "next/image";
+import { GalleryFrame } from "@/components/departure/gallery-frame";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
 
 import type { GalleryImage } from "@/content/departures";
@@ -118,12 +118,10 @@ export function Lightbox({
         </div>
 
         <div className="relative min-h-0 flex-1">
-          <Image
-            src={image.src}
-            alt={image.alt}
-            fill
+          <GalleryFrame
+            image={image}
             sizes="(max-width: 1024px) 100vw, 1024px"
-            quality={75}
+            tone="dark"
             className="object-contain"
           />
         </div>

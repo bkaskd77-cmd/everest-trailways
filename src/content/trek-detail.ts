@@ -31,7 +31,22 @@
 import type { Departure } from "./departures.ts";
 
 export type GalleryImage = {
-  src: string;
+  /**
+   * Absent until a photograph has been checked to show what the caption says.
+   *
+   * The first version of this file invented Unsplash ids from memory and used
+   * them without looking at them. One was a house cat on a sofa, captioned as a
+   * teahouse room. Others were a European apartment, a fine-dining plate, a
+   * rock climber in Thailand and two African rhinos on a page about Nepal's
+   * one-horned rhino.
+   *
+   * The cat was funny. The apartment was the actual problem: it is plausible,
+   * so nobody catches it, and a photograph captioned as something it is not is
+   * precisely the practice this company exists to argue against. An image with
+   * no `src` renders as a captioned placeholder, which is honest about being
+   * unfinished. A wrong photograph is not.
+   */
+  src?: string;
   alt: string;
   /** Factual. What the traveller is looking at, not how to feel about it. */
   caption: string;
@@ -57,468 +72,305 @@ export type Faq = { question: string; answer: string };
 
 /** Same swap-a-string pattern as the hero and the departure cards. */
 const shot = (id: string) =>
-  `https://images.unsplash.com/${id}?auto=format&fit=crop&w=1200&h=900&q=70`;
+  `https://images.unsplash.com/${id}?auto=format&fit=crop&w=1600&h=1000&q=70`;
 
-/* --------------------------------------------------------------- galleries */
-
-const IMG = {
-  teahouseRoom: shot("photo-1518791841217-8f162f1e1131"),
-  dalBhat: shot("photo-1585937421612-70a008356fbe"),
-  teahouseDining: shot("photo-1414235077428-338989a2e8c0"),
-  lodgeRoom: shot("photo-1522708323590-d24dbb6b0267"),
-  breakfast: shot("photo-1533089860892-a7c6f0a88666"),
-  jeep: shot("photo-1533473359331-0135ef1b58bf"),
-  bus: shot("photo-1544620347-c4fd4a3d5957"),
-  planeSmall: shot("photo-1436491865332-7a61a109cc05"),
-  suspensionBridge: shot("photo-1544735716-392fe2489ffa"),
-  trailStone: shot("photo-1551632811-561732d1e306"),
-  porters: shot("photo-1522163182402-834f871fd851"),
-  guideGroup: shot("photo-1517457373958-b7bdd4587205"),
-  prayerFlags: shot("photo-1526772662000-3f88f10405ff"),
-  ridgeMorning: shot("photo-1464822759023-fed622ff2c3b"),
-  village: shot("photo-1544735716-392fe2489ffa"),
-  terraces: shot("photo-1470071459604-3b5ec3a7fe05"),
-  forestTrail: shot("photo-1441974231531-c6227db76b6e"),
-  riverGrass: shot("photo-1500534314209-a25ddb2bd429"),
-  rhino: shot("photo-1547970810-dc1eac37d174"),
-  sunriseHills: shot("photo-1506905925346-21bda4d32df4"),
+/**
+ * Photographs that have been opened and looked at.
+ *
+ * Every id below was downloaded and viewed before it was used, and the note
+ * says what is actually in the frame. Nothing goes in this object on the
+ * strength of what an id sounds like it should be.
+ *
+ * Three of these are recognisably Nepal. The rest are honest about being
+ * generic — a forest path is a forest path — and their captions say only what
+ * the picture shows. None of them claims a place it is not.
+ */
+const VERIFIED = {
+  /** Checked: curry and rice in metal bowls. */
+  riceAndCurry: shot("photo-1585937421612-70a008356fbe"),
+  /** Checked: fried egg, toast, bacon and tomato on a plate. */
+  cookedBreakfast: shot("photo-1533089860892-a7c6f0a88666"),
+  /** Checked: a stupa on a forested ridge below high snow peaks. Nepal. */
+  stupaRidge: shot("photo-1544735716-392fe2489ffa"),
+  /** Checked: a trekker standing at a cairn above a Himalayan valley. Nepal. */
+  cairnTrekker: shot("photo-1526772662000-3f88f10405ff"),
+  /** Checked: a coach parked at dusk below snow mountains. */
+  nightCoach: shot("photo-1544620347-c4fd4a3d5957"),
+  /** Checked: snow peaks standing above a sea of cloud at sunrise. */
+  peaksAboveCloud: shot("photo-1506905925346-21bda4d32df4"),
+  /** Checked: layered blue ridges fading into haze. */
+  layeredRidges: shot("photo-1500534314209-a25ddb2bd429"),
+  /** Checked: a dirt path through tall forest. */
+  forestPath: shot("photo-1441974231531-c6227db76b6e"),
 } as const;
 
 /**
- * The shared spine of every gallery.
+ * A slot with no photograph yet.
  *
- * Accommodation and food first, because they answer the questions people are
- * too embarrassed to ask. The scenery is last, which is the opposite of how
- * this is normally ordered and the point.
+ * Rendered as a captioned panel rather than filled with something approximate.
+ * The caption is the part that matters here — it is what a first-timer is
+ * actually reading — and it is true whether or not the picture behind it
+ * exists.
  */
-function baseGallery(opts: {
-  room: string;
-  roomAlt: string;
-  roomCaption: string;
-  meal: string;
-  mealAlt: string;
-  mealCaption: string;
-}): GalleryImage[] {
-  return [
-    {
-      src: opts.room,
-      alt: opts.roomAlt,
-      caption: opts.roomCaption,
-      category: "accommodation",
-    },
-    {
-      src: opts.meal,
-      alt: opts.mealAlt,
-      caption: opts.mealCaption,
-      category: "food",
-    },
-  ];
-}
+const pending = (
+  category: GalleryImage["category"],
+  caption: string,
+): GalleryImage => ({ alt: "", caption, category });
 
-const TEAHOUSE_ROOM = {
-  room: IMG.teahouseRoom,
-  roomAlt: "A twin teahouse room with two single beds and a small window.",
-  roomCaption:
-    "A standard twin teahouse room. Two beds, a thin mattress, a window, no heating. You sleep in the bag you carry.",
+/* --------------------------------------------------------------- galleries */
+
+const TEAHOUSE_ROOM = pending(
+  "accommodation",
+  "A standard twin teahouse room: two beds, a thin mattress, a window, no heating. You sleep in the bag you carry.",
+);
+
+const TEAHOUSE_DINING = pending(
+  "accommodation",
+  "The dining room is the only heated room in the building and the stove is lit in the evening. Everyone sits in it until bed.",
+);
+
+const LODGE_ROOM = pending(
+  "accommodation",
+  "A lodge room with a private bathroom, a fan and a net over the bed. This is a hotel, not a teahouse.",
+);
+
+const PORTERS = pending(
+  "people",
+  "Porters carry a maximum of 20kg on our trips, which is below the legal limit and below what is common.",
+);
+
+const GUIDE_BRIEFING = pending(
+  "people",
+  "The morning briefing: the route, the weather, and the turnaround time for the day.",
+);
+
+const DAL_BHAT: GalleryImage = {
+  src: VERIFIED.riceAndCurry,
+  alt: "Rice with lentil and vegetable curry served in metal bowls.",
+  caption:
+    "Dal bhat: rice, lentil soup, a vegetable curry and pickle. Refills are free and it is what the guides eat twice a day.",
+  category: "food",
 };
 
-const DAL_BHAT = {
-  meal: IMG.dalBhat,
-  mealAlt: "A metal plate of rice, lentil soup, curried vegetables and pickle.",
-  mealCaption:
-    "Dal bhat: rice, lentil soup, a vegetable curry and pickle. Refills are free and it is what the guides eat twice a day.",
+const LODGE_BREAKFAST: GalleryImage = {
+  src: VERIFIED.cookedBreakfast,
+  alt: "A cooked breakfast of egg, toast, bacon and tomato on a plate.",
+  caption:
+    "Full board at the lodge. A cooked breakfast, dinner at the lodge, and a packed lunch on full days out.",
+  category: "food",
+};
+
+const FOREST_PATH: GalleryImage = {
+  src: VERIFIED.forestPath,
+  alt: "A dirt path running through tall forest.",
+  caption:
+    "Long stretches of the lower route are forest walking on a made path, in shade, with no view out.",
+  category: "trail",
+};
+
+const CAIRN: GalleryImage = {
+  src: VERIFIED.cairnTrekker,
+  alt: "A trekker standing beside a stone cairn above a Himalayan valley.",
+  caption:
+    "Cairns mark the line where the trail is faint. The guide walks in front of the group on any section like this.",
+  category: "trail",
+};
+
+const COACH: GalleryImage = {
+  src: VERIFIED.nightCoach,
+  alt: "A coach parked at dusk below snow-covered mountains.",
+  caption:
+    "The long road transfers are by coach or private vehicle, with a seat each and a meal stop.",
+  category: "transport",
+};
+
+const STUPA_RIDGE: GalleryImage = {
+  src: VERIFIED.stupaRidge,
+  alt: "A stupa on a forested ridge below high snow peaks.",
+  caption:
+    "A stupa on the ridge, with the high peaks behind it. Most of the walking days end somewhere like this.",
+  category: "landscape",
 };
 
 export const GALLERIES: Record<string, GalleryImage[]> = {
   "everest-base-camp": [
-    ...baseGallery({ ...TEAHOUSE_ROOM, ...DAL_BHAT }),
-    {
-      src: IMG.teahouseDining,
-      alt: "A teahouse dining room with benches around a central stove.",
-      caption:
-        "The dining room is the only heated room in the building, and the stove is lit in the evening. Everyone sits in it until bed.",
-      category: "accommodation",
-    },
-    {
-      src: IMG.planeSmall,
-      alt: "A small twin-propeller aircraft on a mountain airstrip.",
-      caption:
-        "The aircraft that flies to Lukla. Sixteen seats, no toilet, thirty-five minutes when it goes.",
-      category: "transport",
-    },
-    {
-      src: IMG.suspensionBridge,
-      alt: "A steel suspension bridge hung with prayer flags over a gorge.",
-      caption:
-        "One of five suspension bridges between Phakding and Namche. They move underfoot and they are the only way across.",
-      category: "trail",
-    },
-    {
-      src: IMG.porters,
-      alt: "Porters carrying loads on a stone trail.",
-      caption:
-        "Porters carry a maximum of 20kg on this trip, which is below the legal limit and below what is common.",
-      category: "people",
-    },
-    {
-      src: IMG.prayerFlags,
-      alt: "Prayer flags strung across a high ridge with peaks behind.",
-      caption:
-        "The ridge above Namche at around 3,800 m. Most groups walk this twice, once on an acclimatisation day.",
-      category: "landscape",
-    },
+    TEAHOUSE_ROOM,
+    DAL_BHAT,
+    TEAHOUSE_DINING,
+    pending(
+      "transport",
+      "The aircraft that flies to Lukla. Sixteen seats, no toilet, thirty-five minutes when it goes.",
+    ),
+    pending(
+      "trail",
+      "One of five suspension bridges between Phakding and Namche. They move underfoot and they are the only way across.",
+    ),
+    PORTERS,
+    STUPA_RIDGE,
   ],
 
   "annapurna-base-camp": [
-    ...baseGallery({ ...TEAHOUSE_ROOM, ...DAL_BHAT }),
-    {
-      src: IMG.trailStone,
-      alt: "A stone staircase climbing through terraced hillside.",
-      caption:
-        "The stone stairs above Chhomrong. Around 2,500 steps down and then the same back up on the return.",
-      category: "trail",
-    },
-    {
-      src: IMG.bus,
-      alt: "A tourist coach on a hill road.",
-      caption:
-        "The Kathmandu to Pokhara coach. Seven hours, one meal stop, a seat each.",
-      category: "transport",
-    },
-    {
-      src: IMG.forestTrail,
-      alt: "A path through dense rhododendron forest.",
-      caption:
-        "Rhododendron forest between Bamboo and Deurali. In leech season the guides carry salt.",
-      category: "trail",
-    },
-    {
-      src: IMG.guideGroup,
-      alt: "A guide talking to a small group beside a trail.",
-      caption:
-        "The morning briefing. Route, weather, and the turnaround time for the day.",
-      category: "people",
-    },
-    {
-      src: IMG.ridgeMorning,
-      alt: "The Annapurna sanctuary rim at first light.",
-      caption:
-        "The sanctuary at first light, 4,130 m. Most groups are here for one morning.",
-      category: "landscape",
-    },
+    TEAHOUSE_ROOM,
+    DAL_BHAT,
+    pending(
+      "trail",
+      "The stone stairs above Chhomrong. Around 2,500 steps down, and the same back up on the return.",
+    ),
+    COACH,
+    FOREST_PATH,
+    GUIDE_BRIEFING,
+    CAIRN,
   ],
 
   "annapurna-circuit": [
-    ...baseGallery({ ...TEAHOUSE_ROOM, ...DAL_BHAT }),
-    {
-      src: IMG.teahouseDining,
-      alt: "A teahouse dining room with benches around a central stove.",
-      caption:
-        "Dining rooms on the circuit are large and shared with every other group in the village.",
-      category: "accommodation",
-    },
-    {
-      src: IMG.jeep,
-      alt: "A four-wheel-drive vehicle on a rough mountain road.",
-      caption:
-        "The jeep sections. The road now runs a long way up both sides and we drive the parts that are no longer worth walking.",
-      category: "transport",
-    },
-    {
-      src: IMG.village,
-      alt: "A stone village below high peaks.",
-      caption:
-        "Manang at 3,540 m, where the itinerary stops for an acclimatisation day before the pass.",
-      category: "trail",
-    },
-    {
-      src: IMG.porters,
-      alt: "Porters on a high trail.",
-      caption:
-        "Loads are capped at 20kg and split between porters rather than piled on one.",
-      category: "people",
-    },
-    {
-      src: IMG.prayerFlags,
-      alt: "Prayer flags at a high pass.",
-      caption:
-        "Thorong La, 5,416 m. Crossed before dawn because the wind rises through the morning.",
-      category: "landscape",
-    },
+    TEAHOUSE_ROOM,
+    DAL_BHAT,
+    TEAHOUSE_DINING,
+    pending(
+      "transport",
+      "The jeep sections. The road now runs a long way up both sides and we drive the parts that are no longer worth walking.",
+    ),
+    pending(
+      "trail",
+      "Manang at 3,540 m, where the itinerary stops for an acclimatisation day before the pass.",
+    ),
+    PORTERS,
+    CAIRN,
   ],
 
   "langtang-valley": [
-    ...baseGallery({ ...TEAHOUSE_ROOM, ...DAL_BHAT }),
-    {
-      src: IMG.forestTrail,
-      alt: "A trail through mossy forest beside a river.",
-      caption:
-        "The lower valley below Lama Hotel. Two days of forest before the valley opens.",
-      category: "trail",
-    },
-    {
-      src: IMG.jeep,
-      alt: "A vehicle on a rough hill road.",
-      caption:
-        "The road to Syabrubesi. Seven hours, and genuinely poor for the last two.",
-      category: "transport",
-    },
-    {
-      src: IMG.village,
-      alt: "A rebuilt stone village on a valley floor.",
-      caption:
-        "Langtang village, rebuilt after the 2015 earthquake destroyed it. The memorial is on the trail.",
-      category: "trail",
-    },
-    {
-      src: IMG.guideGroup,
-      alt: "A guide with a small group on a valley trail.",
-      caption: "Groups here are small. This trek runs at one guide to four.",
-      category: "people",
-    },
-    {
-      src: IMG.ridgeMorning,
-      alt: "A glaciated valley head under morning light.",
-      caption:
-        "The valley head above Kyanjin Gompa, 3,870 m. The high point is walked from here and back the same day.",
-      category: "landscape",
-    },
+    TEAHOUSE_ROOM,
+    DAL_BHAT,
+    FOREST_PATH,
+    pending(
+      "transport",
+      "The road to Syabrubesi. Seven hours, and genuinely poor for the last two.",
+    ),
+    pending(
+      "trail",
+      "Langtang village, rebuilt after the 2015 earthquake destroyed it. The memorial is on the trail.",
+    ),
+    CAIRN,
   ],
 
   "upper-mustang": [
-    ...baseGallery({
-      room: IMG.lodgeRoom,
-      roomAlt: "A simple guesthouse room with two beds and whitewashed walls.",
-      roomCaption:
-        "Guesthouse rooms north of Kagbeni. Thicker walls than a teahouse, and colder, because the wind does not stop.",
-      ...DAL_BHAT,
-    }),
-    {
-      src: IMG.planeSmall,
-      alt: "A small aircraft on a valley airstrip.",
-      caption:
-        "The Jomsom flight. Morning only — the valley wind closes the strip by about 11am most days.",
-      category: "transport",
-    },
-    {
-      src: IMG.terraces,
-      alt: "Irrigated barley fields against bare hillsides.",
-      caption:
-        "Irrigated fields at Ghami. Everything green here is watered by hand from a channel.",
-      category: "trail",
-    },
-    {
-      src: IMG.village,
-      alt: "A walled town on a high desert plateau.",
-      caption:
-        "Lo Manthang, 3,840 m. The walled town is the reason the permit costs $500.",
-      category: "landscape",
-    },
-    {
-      src: IMG.guideGroup,
-      alt: "A guide and travellers outside a monastery wall.",
-      caption:
-        "Several gompas charge a photography fee at the door, paid on the spot to the monastery.",
-      category: "people",
-    },
+    pending(
+      "accommodation",
+      "Guesthouse rooms north of Kagbeni. Thicker walls than a teahouse, and colder, because the wind does not stop.",
+    ),
+    DAL_BHAT,
+    pending(
+      "transport",
+      "The Jomsom flight. Morning only — the valley wind closes the strip by about 11am most days.",
+    ),
+    pending(
+      "trail",
+      "Irrigated fields at Ghami. Everything green here is watered by hand from a channel.",
+    ),
+    pending(
+      "landscape",
+      "Lo Manthang at 3,840 m. The walled town is the reason the permit costs $500.",
+    ),
+    GUIDE_BRIEFING,
   ],
 
   "poon-hill": [
-    ...baseGallery({ ...TEAHOUSE_ROOM, ...DAL_BHAT }),
+    TEAHOUSE_ROOM,
+    DAL_BHAT,
+    pending(
+      "trail",
+      "The Ulleri stairs. Around 3,300 steps in one climb, and the hardest ninety minutes of the trip.",
+    ),
+    COACH,
+    FOREST_PATH,
     {
-      src: IMG.trailStone,
-      alt: "A long stone staircase climbing through forest.",
-      caption:
-        "The Ulleri stairs. Around 3,300 steps in one climb, and the hardest ninety minutes of the trip.",
-      category: "trail",
-    },
-    {
-      src: IMG.bus,
-      alt: "A tourist coach on a hill road.",
-      caption: "Kathmandu to Pokhara by coach. Seven hours each way.",
-      category: "transport",
-    },
-    {
-      src: IMG.sunriseHills,
-      alt: "Layered ridges under early light.",
+      src: VERIFIED.peaksAboveCloud,
+      alt: "Snow peaks standing above a sea of cloud at sunrise.",
       caption:
         "Poon Hill at 3,210 m before sunrise. Clouded out roughly one morning in four outside the driest months.",
       category: "landscape",
     },
-    {
-      src: IMG.guideGroup,
-      alt: "A guide with a small group at a trail junction.",
-      caption: "One guide to six on this trek, and a porter to every three.",
-      category: "people",
-    },
-    {
-      src: IMG.forestTrail,
-      alt: "A path through rhododendron forest.",
-      caption:
-        "The forest between Ghorepani and Tadapani, which flowers in late March and April.",
-      category: "trail",
-    },
   ],
 
   "mardi-himal": [
-    ...baseGallery({ ...TEAHOUSE_ROOM, ...DAL_BHAT }),
-    {
-      src: IMG.forestTrail,
-      alt: "A narrow ridge path through moss and rhododendron.",
-      caption:
-        "The ridge below Low Camp. The trail follows one spur for two days with no side valleys.",
-      category: "trail",
-    },
-    {
-      src: IMG.jeep,
-      alt: "A jeep at a hill trailhead.",
-      caption: "The jeep from Pokhara to the trailhead, both directions.",
-      category: "transport",
-    },
-    {
-      src: IMG.teahouseDining,
-      alt: "A small dining room in a ridge lodge.",
-      caption:
-        "High Camp has four lodges and no alternative within two hours, so we book ahead and send a porter up early.",
-      category: "accommodation",
-    },
-    {
-      src: IMG.guideGroup,
-      alt: "A guide pointing out a route from a ridge.",
-      caption:
-        "One guide to six, with an assistant for the two days spent high.",
-      category: "people",
-    },
-    {
-      src: IMG.ridgeMorning,
-      alt: "A high viewpoint under morning cloud.",
-      caption:
-        "The high point at 4,500 m, walked from High Camp and back before the cloud comes up.",
-      category: "landscape",
-    },
+    TEAHOUSE_ROOM,
+    DAL_BHAT,
+    pending(
+      "trail",
+      "The ridge below Low Camp. The trail follows one spur for two days with no side valleys.",
+    ),
+    pending(
+      "accommodation",
+      "High Camp has four lodges and no alternative within two hours, so we book ahead and send a porter up early.",
+    ),
+    GUIDE_BRIEFING,
+    CAIRN,
   ],
 
   "chitwan-safari": [
-    ...baseGallery({
-      room: IMG.lodgeRoom,
-      roomAlt: "A lodge room with a double bed, fan and mosquito net.",
-      roomCaption:
-        "Lodge rooms at Sauraha. Private bathroom, hot water, fan, and a net over the bed.",
-      meal: IMG.breakfast,
-      mealAlt: "A buffet breakfast laid out on a table.",
-      mealCaption:
-        "Full board at the lodge. Buffet breakfast and dinner, packed lunch on park days.",
-    }),
-    {
-      src: IMG.jeep,
-      alt: "An open safari jeep on a forest track.",
-      caption:
-        "Two jeep drives inside the park with a licensed naturalist. Open sided, and dusty in the dry season.",
-      category: "transport",
-    },
-    {
-      src: IMG.riverGrass,
-      alt: "A slow river running between grassland and forest.",
-      caption:
-        "The Rapti river. The canoe stretch is a dugout, sitting low, about forty minutes.",
-      category: "trail",
-    },
-    {
-      src: IMG.rhino,
-      alt: "A one-horned rhinoceros standing in tall grass.",
-      caption:
-        "Greater one-horned rhino. Commonly seen at Chitwan; nothing is promised.",
-      category: "landscape",
-    },
-    {
-      src: IMG.guideGroup,
-      alt: "A naturalist talking to a small group at the park edge.",
-      caption:
-        "Walking inside the park is done with a park guard, which the park requires.",
-      category: "people",
-    },
+    LODGE_ROOM,
+    LODGE_BREAKFAST,
+    pending(
+      "transport",
+      "Two jeep drives inside the park with a licensed naturalist. Open sided, and dusty in the dry season.",
+    ),
+    pending(
+      "trail",
+      "The Rapti river. The canoe stretch is a dugout, sitting low, about forty minutes.",
+    ),
+    pending(
+      "landscape",
+      "Greater one-horned rhino, which is a different animal from the African species. Commonly seen at Chitwan; nothing is promised.",
+    ),
+    pending(
+      "people",
+      "Walking inside the park is done with a park guard, which the park requires.",
+    ),
   ],
 
   "bardia-wildlife": [
-    ...baseGallery({
-      room: IMG.lodgeRoom,
-      roomAlt: "A simple lodge room with a bed, net and shuttered window.",
-      roomCaption:
-        "Lodge rooms at Thakurdwara. Private bathroom, solar hot water, and a net over the bed.",
-      meal: IMG.breakfast,
-      mealAlt: "A plate of rice, dal and vegetables at a lodge table.",
-      mealCaption:
-        "Full board at the lodge, mostly Nepali. Packed lunch on full days in the park.",
-    }),
-    {
-      src: IMG.planeSmall,
-      alt: "A propeller aircraft at a regional airport.",
-      caption:
-        "The Nepalgunj flight. Bardia is a fifteen-hour drive otherwise, which is why this costs more than Chitwan.",
-      category: "transport",
-    },
-    {
-      src: IMG.riverGrass,
-      alt: "A wide river channel with grassland beyond.",
-      caption:
-        "The Karnali. Much of the tiger tracking is sitting still beside water and waiting.",
-      category: "trail",
-    },
-    {
-      src: IMG.forestTrail,
-      alt: "A track through sal forest.",
-      caption:
-        "Sal forest on foot with an armed park guard. Full days, and often nothing seen.",
-      category: "trail",
-    },
-    {
-      src: IMG.guideGroup,
-      alt: "A naturalist and a small group at the forest edge.",
-      caption:
-        "Groups are capped at eight here. Bardia's tiger sighting rate is roughly one trip in three.",
-      category: "people",
-    },
+    LODGE_ROOM,
+    LODGE_BREAKFAST,
+    pending(
+      "transport",
+      "The Nepalgunj flight. Bardia is a fifteen-hour drive otherwise, which is why this costs more than Chitwan.",
+    ),
+    pending(
+      "trail",
+      "The Karnali. Much of the tiger tracking is sitting still beside water and waiting.",
+    ),
+    pending(
+      "trail",
+      "Sal forest on foot with an armed park guard. Full days, and often nothing seen.",
+    ),
+    pending(
+      "people",
+      "Groups are capped at eight here. Bardia's tiger sighting rate is roughly one trip in three.",
+    ),
   ],
 
   "kathmandu-valley-rim": [
-    ...baseGallery({
-      room: IMG.lodgeRoom,
-      roomAlt: "A hotel room with two beds and a window onto hills.",
-      roomCaption:
-        "Hotel and lodge rooms on the rim. Private bathroom, hot shower, heating in winter.",
-      meal: IMG.breakfast,
-      mealAlt: "Breakfast on a terrace table.",
-      mealCaption:
-        "Breakfast every day and lunch on walking days. Dinners in Kathmandu are yours to choose.",
-    }),
+    pending(
+      "accommodation",
+      "Hotel and lodge rooms on the rim. Private bathroom, hot shower, heating in winter.",
+    ),
+    LODGE_BREAKFAST,
+    pending(
+      "trail",
+      "Terraces below the Shivapuri rim. The walking is on farm tracks and footpaths, not mountain trail.",
+    ),
+    pending(
+      "trail",
+      "Bhaktapur. The heritage entry is included, so there is nothing to pay at the gate.",
+    ),
     {
-      src: IMG.terraces,
-      alt: "Terraced fields falling away from a ridge path.",
-      caption:
-        "Terraces below the Shivapuri rim. The walking is on farm tracks and footpaths, not mountain trail.",
-      category: "trail",
-    },
-    {
-      src: IMG.village,
-      alt: "Brick and timber buildings around a temple square.",
-      caption:
-        "Bhaktapur. The heritage entry is included, so there is nothing to pay at the gate.",
-      category: "trail",
-    },
-    {
-      src: IMG.sunriseHills,
-      alt: "Layered hills under morning haze.",
+      src: VERIFIED.layeredRidges,
+      alt: "Layered ridges fading into haze.",
       caption:
         "The rim at Nagarkot. From late December to March the valley air is often thick enough to lose the view entirely.",
       category: "landscape",
     },
-    {
-      src: IMG.guideGroup,
-      alt: "A guide with a group on a ridge track.",
-      caption:
-        "One guide to eight on this trip, and no porters — you carry a day pack.",
-      category: "people",
-    },
+    GUIDE_BRIEFING,
   ],
 };
 

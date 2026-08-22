@@ -682,9 +682,29 @@ for (const d of departures) {
       );
     }
   }
+  /*
+   * A photograph needs alt text. A pending slot does not — it renders as a
+   * captioned panel whose accessible name is the caption, so alt would be a
+   * second copy of it.
+   *
+   * The pending count is reported rather than failed. Eight of the nineteen
+   * images this site was built with turned out to show something other than
+   * their caption, including a house cat filed as a teahouse room, and the
+   * honest state until real photography exists is a visible gap. What must
+   * never happen is the gap being filled with something approximate, which is
+   * why there is no rule here that could be satisfied by doing that.
+   */
   for (const image of d.gallery) {
-    if (!image.alt.trim())
+    if (image.src && !image.alt.trim()) {
       fail(id, "gallery-no-alt", `${image.src} has no alt`);
+    }
+    if (!image.src && image.alt.trim()) {
+      fail(
+        id,
+        "gallery-stray-alt",
+        `"${image.caption.slice(0, 40)}" has alt text but no photograph`,
+      );
+    }
     if (image.caption.trim().length < 20) {
       fail(id, "gallery-thin-caption", `"${image.caption}" is not a caption`);
     }
@@ -1183,6 +1203,6 @@ if (problems.length) {
   process.exitCode = 1;
 } else {
   console.log(
-    `\n  ${departures.length} departures · ${departures.reduce((n, d) => n + d.costSheet.lines.length, 0)} cost lines, every ledger balances to the dollar · ${departures.reduce((n, d) => n + d.costSheet.contingencies.length, 0)} contingencies published · feed shape ok · no problems\n`,
+    `\n  ${departures.length} departures · ${departures.reduce((n, d) => n + d.costSheet.lines.length, 0)} cost lines, every ledger balances to the dollar · ${departures.reduce((n, d) => n + d.costSheet.contingencies.length, 0)} contingencies published · ${new Set(departures.flatMap((d) => d.gallery.filter((i) => !i.src).map((i) => i.caption))).size} gallery slots awaiting real photography · feed shape ok · no problems\n`,
   );
 }

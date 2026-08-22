@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -53,7 +52,10 @@ import { faqJsonLd } from "@/lib/departures-feed";
 import { FaqAccordion } from "@/components/departure/faq-section";
 import { OtherDates } from "@/components/departure/other-dates";
 import { PracticalitiesSection } from "@/components/departure/practicalities";
-import { GallerySlider } from "@/components/departure/gallery-slider";
+import {
+  DepartureHeroSlider,
+  HeroBreadcrumb,
+} from "@/components/departure/hero-slider";
 
 /**
  * One departure, in full.
@@ -163,107 +165,68 @@ export default async function DeparturePage({
         ]}
       />
 
-      {/* 1 — HEADER. Shadow-based legibility, exactly as the hero does it: no
-             panel, no scrim rectangle, the type carries its own contrast. */}
-      <header className="relative isolate min-h-[62svh] overflow-hidden bg-summit text-glacier">
-        <Image
-          src={departure.image.src}
-          alt={departure.image.alt}
-          fill
-          sizes="100vw"
-          quality={72}
-          loading="eager"
-          fetchPriority="high"
-          className="object-cover"
-        />
+      {/* 1 — HEADER, and the gallery.
+             The page used to open on one decided photograph and keep the
+             gallery in a band below the fold. Both were weaker for it. Most
+             operators lead with a summit; this leads with the room and the
+             plate, which is what somebody is actually buying. */}
+      <DepartureHeroSlider
+        images={departure.gallery}
+        region={departure.region}
+        trekName={departure.trekName}
+      >
+        <HeroBreadcrumb trekName={departure.trekName} />
+
+        <h1
+          className="mt-3 max-w-[18ch] font-display text-5xl tracking-tight text-balance lg:text-6xl"
+          style={{ textShadow: textShadowCss("display") }}
+        >
+          {departure.trekName}
+        </h1>
+
         <div
-          aria-hidden
-          className="absolute inset-0"
-          style={{
-            backgroundImage:
-              "linear-gradient(100deg, rgb(11 31 42 / 0.62) 0%, rgb(11 31 42 / 0.44) 42%, rgb(11 31 42 / 0.18) 72%, rgb(11 31 42 / 0) 100%)",
-          }}
-        />
-
-        <div className="relative shell flex min-h-[62svh] flex-col justify-end pt-28 pb-14">
-          <nav aria-label="Breadcrumb">
-            <ol
-              className="flex flex-wrap items-center gap-2 text-xs tracking-[0.14em] uppercase"
-              style={{ textShadow: textShadowCss("small") }}
-            >
-              <li>
-                <Link href="/" className="hover:underline">
-                  Home
-                </Link>
-              </li>
-              <li aria-hidden>/</li>
-              <li>
-                <Link href="/departures" className="hover:underline">
-                  Departures
-                </Link>
-              </li>
-              <li aria-hidden>/</li>
-              <li className="text-glacier/70">{departure.trekName}</li>
-            </ol>
-          </nav>
-
-          <p
-            className="mt-8 text-xs tracking-[0.24em] uppercase"
-            style={{ textShadow: textShadowCss("small") }}
-          >
-            {departure.region}
+          className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm"
+          style={{ textShadow: textShadowCss("small") }}
+        >
+          <p className="tabular">
+            {formatDateRange(departure.departsOn, departure.returnsOn)}
           </p>
-          <h1
-            className="mt-3 max-w-[18ch] font-display text-5xl tracking-tight text-balance lg:text-6xl"
-            style={{ textShadow: textShadowCss("display") }}
+          <span
+            className={cn(
+              "rounded-full px-3 py-1 text-xs font-medium tracking-[0.08em] uppercase",
+              status === "guaranteed" && "bg-verified text-snow",
+              status === "filling" && "bg-prayer text-snow",
+              status === "needs-n" && "bg-glacier text-summit",
+              !bookable && "bg-stone-deep text-glacier",
+            )}
+            style={{ textShadow: "none" }}
           >
-            {departure.trekName}
-          </h1>
-
-          <div
-            className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm"
-            style={{ textShadow: textShadowCss("small") }}
-          >
-            <p className="tabular">
-              {formatDateRange(departure.departsOn, departure.returnsOn)}
-            </p>
-            <span
-              className={cn(
-                "rounded-full px-3 py-1 text-xs font-medium tracking-[0.08em] uppercase",
-                status === "guaranteed" && "bg-verified text-snow",
-                status === "filling" && "bg-prayer text-snow",
-                status === "needs-n" && "bg-glacier text-summit",
-                !bookable && "bg-stone-deep text-glacier",
-              )}
-              style={{ textShadow: "none" }}
-            >
-              {STATUS_LABEL[status]}
-            </span>
-          </div>
-
-          <dl
-            className="mt-6 flex flex-wrap gap-x-8 gap-y-3 text-sm"
-            style={{ textShadow: textShadowCss("small") }}
-          >
-            {[
-              ["Days", `${departure.days}`],
-              [
-                "Max altitude",
-                `${departure.maxAltitudeM.toLocaleString("en-GB")} m`,
-              ],
-              ["Difficulty", departure.difficulty],
-              ["Guide ratio", departure.guideRatio],
-            ].map(([label, value]) => (
-              <div key={label}>
-                <dt className="text-xs tracking-[0.14em] text-glacier/70 uppercase">
-                  {label}
-                </dt>
-                <dd className="mt-1 tabular">{value}</dd>
-              </div>
-            ))}
-          </dl>
+            {STATUS_LABEL[status]}
+          </span>
         </div>
-      </header>
+
+        <dl
+          className="mt-6 flex flex-wrap gap-x-8 gap-y-3 text-sm"
+          style={{ textShadow: textShadowCss("small") }}
+        >
+          {[
+            ["Days", `${departure.days}`],
+            [
+              "Max altitude",
+              `${departure.maxAltitudeM.toLocaleString("en-GB")} m`,
+            ],
+            ["Difficulty", departure.difficulty],
+            ["Guide ratio", departure.guideRatio],
+          ].map(([label, value]) => (
+            <div key={label}>
+              <dt className="text-xs tracking-[0.14em] text-glacier/70 uppercase">
+                {label}
+              </dt>
+              <dd className="mt-1 tabular">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </DepartureHeroSlider>
 
       {/* The sentinel the sticky bar watches. Zero height, so it cannot shift
           anything. */}
@@ -368,37 +331,7 @@ export default async function DeparturePage({
           </div>
         </section>
 
-        {/* 4 — GALLERY. The room and the plate before the mountain. */}
-        <section
-          id="gallery"
-          aria-labelledby="gallery-heading"
-          className="scroll-mt-24 border-t border-border"
-        >
-          <div className="shell py-16 lg:py-20">
-            <SectionHead
-              eyebrow="What you are buying"
-              title="The room, the plate, the trail."
-              id="gallery-heading"
-            >
-              Operators publish summits. You have seen the summit. These are the
-              things people actually want to know and are slightly embarrassed
-              to ask about — where you sleep, what is on the plate, and what the
-              trail underfoot is like.
-            </SectionHead>
-
-            {/*
-              Capped, not full bleed. At 1,600px the section band is 1,425px
-              wide and a photograph stretched across all of it stops being a
-              photograph and becomes a backdrop. The slider sits on the same
-              measure as the prose above it.
-            */}
-            <div className="mt-12 max-w-5xl lg:mt-16">
-              <GallerySlider images={departure.gallery} />
-            </div>
-          </div>
-        </section>
-
-        {/* 5 — ROUTE AND ALTITUDE, read together */}
+        {/* 4 — ROUTE AND ALTITUDE, read together */}
         <section
           aria-labelledby="altitude-heading"
           className="border-t border-border bg-band"
