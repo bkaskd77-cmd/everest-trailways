@@ -325,7 +325,21 @@ export function DepartureHeroSlider({
 }
 
 /** The breadcrumb, kept here so the header owns its own shadow treatment. */
-export function HeroBreadcrumb({ trekName }: { trekName: string }) {
+/**
+ * `trekSlug` makes the last crumb a link rather than a label.
+ *
+ * The trek is the page above this one — the evergreen answer to "is this the
+ * right walk", where a date can only answer "is this the right date". Leaving
+ * it as plain text left every departure page as a leaf with nothing above it
+ * but a list.
+ */
+export function HeroBreadcrumb({
+  trekName,
+  trekSlug,
+}: {
+  trekName: string;
+  trekSlug?: string;
+}) {
   return (
     <nav aria-label="Breadcrumb" className="mb-6">
       <ol
@@ -344,8 +358,14 @@ export function HeroBreadcrumb({ trekName }: { trekName: string }) {
           </Link>
         </li>
         <li aria-hidden>/</li>
-        <li aria-current="page" className="text-glacier">
-          {trekName}
+        <li className="text-glacier">
+          {trekSlug ? (
+            <Link href={`/treks/${trekSlug}`} className="hover:text-snow">
+              {trekName}
+            </Link>
+          ) : (
+            trekName
+          )}
         </li>
       </ol>
       <Link

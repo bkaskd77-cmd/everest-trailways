@@ -34,6 +34,8 @@ import {
   seatsRemaining,
   type Departure,
   type DepartureStatus,
+  gridImages,
+  headerImages,
 } from "../src/content/departures.ts";
 
 type Problem = { id: string; rule: string; detail: string };
@@ -689,6 +691,46 @@ for (const d of departures) {
       );
     }
   }
+  /*
+   * The two halves of the gallery, and the line between them.
+   *
+   * The header slider shows the mountain, the grid below shows the trip, and
+   * nothing appears in both — otherwise the same teahouse room is the hero of
+   * the page and a thumbnail four sections later, which reads as a shortage of
+   * photographs rather than as a decision.
+   *
+   * The partition is checked rather than the two lists: a category that
+   * belongs to neither side is an image that silently stops being rendered
+   * anywhere, and that is the failure a "no overlap" check on its own misses.
+   */
+  const header = headerImages(d.gallery);
+  const grid = gridImages(d.gallery);
+
+  for (const image of d.gallery) {
+    const inHeader = header.includes(image);
+    const inGrid = grid.includes(image);
+    if (inHeader && inGrid) {
+      fail(
+        id,
+        "gallery-both-sides",
+        `"${image.caption}" is in the slider and the grid`,
+      );
+    }
+    if (!inHeader && !inGrid) {
+      fail(
+        id,
+        "gallery-orphan",
+        `"${image.caption}" is category "${image.category}", which is in neither half, so it renders nowhere`,
+      );
+    }
+  }
+  if (!header.length) {
+    fail(id, "gallery-empty-half", "the header slider has no images");
+  }
+  if (!grid.length) {
+    fail(id, "gallery-empty-half", "the gallery grid has no images");
+  }
+
   /*
    * A photograph needs alt text. A pending slot does not — it renders as a
    * captioned panel whose accessible name is the caption, so alt would be a

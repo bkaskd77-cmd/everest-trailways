@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, BadgeCheck } from "lucide-react";
 
 import { SectionHead } from "@/components/departure/section-head";
+import { trekForDeparture } from "@/lib/treks";
 import {
   departureStatus,
   formatDate,
@@ -100,6 +101,7 @@ export function OtherDates({
   /** Nearest by region and length. Only used when there are no other dates. */
   alternatives: Departure[];
 }) {
+  const trekSlug = trekForDeparture(departure)?.slug;
   const hasOthers = sameTrek.length > 1;
   const list = hasOthers ? sameTrek : alternatives;
   if (!list.length) return null;
@@ -145,16 +147,35 @@ export function OtherDates({
           ))}
         </ul>
 
-        <Link
-          href="/departures"
-          className="group mt-8 inline-flex items-center gap-2 text-sm font-medium text-prayer-deep dark:text-prayer-light"
-        >
-          All departures
-          <ArrowRight
-            aria-hidden
-            className="size-3.5 transition-transform duration-200 group-hover:translate-x-[3px]"
-          />
-        </Link>
+        {/*
+          Up to the trek before out to everything.
+          Somebody who has read this far and is still looking wants the route,
+          not a list of nineteen unrelated dates.
+        */}
+        <div className="mt-8 flex flex-wrap items-center gap-x-8 gap-y-3">
+          {trekSlug && (
+            <Link
+              href={`/treks/${trekSlug}`}
+              className="group inline-flex items-center gap-2 text-sm font-medium text-prayer-deep dark:text-prayer-light"
+            >
+              Everything about {departure.trekName}
+              <ArrowRight
+                aria-hidden
+                className="size-3.5 transition-transform duration-200 group-hover:translate-x-[3px]"
+              />
+            </Link>
+          )}
+          <Link
+            href="/departures"
+            className="group inline-flex items-center gap-2 text-sm font-medium text-prayer-deep dark:text-prayer-light"
+          >
+            All departures
+            <ArrowRight
+              aria-hidden
+              className="size-3.5 transition-transform duration-200 group-hover:translate-x-[3px]"
+            />
+          </Link>
+        </div>
       </div>
     </section>
   );

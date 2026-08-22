@@ -6,7 +6,16 @@ import { REVEAL_VIEWPORT, STAGGER, staggerContainer } from "@/lib/motion";
 import { StaggerContext } from "@/components/motion/stagger-context";
 import * as m from "motion/react-m";
 
-type StaggerGroupElement = "div" | "section" | "ul" | "ol" | "article";
+// `tbody` is here for the month table: the stagger has to be the row
+// group, because anything else between <table> and <tr> is invalid HTML
+// and the browser hoists it out, taking the animation with it.
+type StaggerGroupElement =
+  | "div"
+  | "section"
+  | "ul"
+  | "ol"
+  | "article"
+  | "tbody";
 
 type StaggerGroupProps = {
   children: React.ReactNode;

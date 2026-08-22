@@ -19,6 +19,17 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
 import { departures } from "../src/content/departures.ts";
+import { TREK_PAGES } from "../src/content/trek-pages.ts";
+
+/** Region slugs, generated the same way the page generates them. */
+const REGION_SLUGS = [...new Set(TREK_PAGES.map((t) => t.region))]
+  .sort()
+  .map((r) =>
+    r
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, ""),
+  );
 
 type Problem = { rule: string; detail: string };
 const problems: Problem[] = [];
@@ -80,6 +91,10 @@ for (const route of dynamicRoutes) {
     for (const d of departures) {
       generated.add(`/departures/${d.slug}/cost-sheet.pdf`);
     }
+  } else if (pattern === "/treks/[slug]") {
+    for (const t of TREK_PAGES) generated.add(`/treks/${t.slug}`);
+  } else if (pattern === "/regions/[slug]") {
+    for (const region of REGION_SLUGS) generated.add(`/regions/${region}`);
   } else {
     fail(
       "unresolved-dynamic",
@@ -112,9 +127,23 @@ for (const file of sourceFiles) {
     found.push({ href: match[1], source: rel, line: at(match.index) });
   }
   for (const match of source.matchAll(TEMPLATE)) {
-    // `/departures/${departure.slug}` — the interpolation is replaced with a
-    // real slug so the shape is checked rather than skipped.
-    const href = match[1].replace(/\$\{[^}]+\}/g, departures[0].slug);
+    /*
+     * The interpolation is replaced with a real slug so the shape is checked
+     * rather than skipped — and with a slug from the right set.
+     *
+     * It used to substitute a departure slug into every template, which meant
+     * `/treks/${trek.slug}` was checked as `/treks/ebc-october-2026`. That
+     * path does not exist, so the guard would have failed a correct link; and
+     * had the treks route been missing, it would have failed for the wrong
+     * reason and pointed at the wrong thing.
+     */
+    const raw = match[1];
+    const sample = raw.startsWith("/treks/")
+      ? TREK_PAGES[0].slug
+      : raw.startsWith("/regions/")
+        ? REGION_SLUGS[0]
+        : departures[0].slug;
+    const href = raw.replace(/\$\{[^}]+\}/g, sample);
     found.push({ href, source: rel, line: at(match.index) });
   }
 }
@@ -214,7 +243,7 @@ for (const file of sourceFiles) {
 
 console.log("\n  Internal links\n");
 console.log(
-  `  ok    ${staticRoutes.size} static routes, ${generated.size} generated from departures`,
+  `  ok    ${staticRoutes.size} static routes, ${generated.size} generated from content`,
 );
 console.log(`  ok    ${found.length} hrefs read from source`);
 console.log(`  ok    ${checked.size} distinct internal paths checked`);

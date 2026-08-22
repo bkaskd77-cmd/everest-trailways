@@ -98,6 +98,22 @@ const PAGES: {
      */
     screens: 24,
   },
+  /*
+   * A trek page, because it is the one built to be found rather than clicked.
+   *
+   * The twelve-month table is the reason it is measured separately: it is the
+   * only fixed-cost block on the site that grows with nothing — twelve rows
+   * whatever the trek — and it sits above three more sections. Everest Base
+   * Camp is the one measured because it carries the most departures and the
+   * longest comparison set, so it is the worst case rather than the first
+   * entry.
+   */
+  {
+    name: "trek /treks/everest-base-camp",
+    path: "/treks/everest-base-camp",
+    answersMatcher: false,
+    screens: 20,
+  },
 ];
 
 /** Fails the run. Properties of the build, identical on any machine. */

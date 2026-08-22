@@ -7,7 +7,17 @@ import { REVEAL_VIEWPORT, fadeUp, withDelay } from "@/lib/motion";
 import { StaggerContext } from "@/components/motion/stagger-context";
 import * as m from "motion/react-m";
 
-type RevealElement = "div" | "section" | "article" | "li" | "span" | "p";
+type RevealElement =
+  | "div"
+  | "section"
+  | "article"
+  | "li"
+  | "span"
+  | "p"
+  // A table row. Transforms apply to <tr> and the stagger parent is the
+  // <tbody>, so the month table reveals row by row without wrapping the
+  // rows in elements a table is not allowed to contain.
+  | "tr";
 
 type RevealProps = {
   children: React.ReactNode;

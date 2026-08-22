@@ -210,6 +210,38 @@ const STUPA_RIDGE: GalleryImage = {
   category: "landscape",
 };
 
+/**
+ * The gallery is split in two, and no photograph appears on both sides.
+ *
+ * The header slider is the mountain: the view and the trail. The grid below is
+ * the trip: the room, the plate, the jeep and the people. They were one pool
+ * fed to two components, which meant the same teahouse room could be both the
+ * hero of the page and a thumbnail four sections later — and it read as a
+ * shortage of photographs rather than a decision.
+ *
+ * The split is by category and it is exhaustive: every category belongs to
+ * exactly one side, so a new one cannot quietly land in neither. The guard
+ * checks the partition rather than trusting this comment.
+ */
+export const HEADER_CATEGORIES = ["landscape", "trail"] as const;
+
+export const GRID_CATEGORIES = [
+  "accommodation",
+  "food",
+  "transport",
+  "people",
+] as const;
+
+export const headerImages = (gallery: GalleryImage[]) =>
+  gallery.filter((g) =>
+    (HEADER_CATEGORIES as readonly string[]).includes(g.category),
+  );
+
+export const gridImages = (gallery: GalleryImage[]) =>
+  gallery.filter((g) =>
+    (GRID_CATEGORIES as readonly string[]).includes(g.category),
+  );
+
 export const GALLERIES: Record<string, GalleryImage[]> = {
   "everest-base-camp": [
     TEAHOUSE_ROOM,

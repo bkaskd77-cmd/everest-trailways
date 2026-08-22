@@ -20,6 +20,12 @@ import {
 
 export type { Contingency, CostLine, CostSheet };
 export type { Faq, GalleryImage, Practicalities };
+export {
+  GRID_CATEGORIES,
+  HEADER_CATEGORIES,
+  gridImages,
+  headerImages,
+} from "./trek-detail.ts";
 export { PLACES, type LatLon } from "./places.ts";
 export {
   RETURN_POINTS,
@@ -806,6 +812,37 @@ export const bookableDepartures = (now: Date = new Date()) =>
   departures.filter((d) => isBookable(d, now));
 
 /* ---------------------------------------------------------------- derived */
+
+/**
+ * The dates on a trek that did not reach their minimum.
+ *
+ * Lives here rather than in the page's own helpers so the guard can import the
+ * exact function the trek page renders. Deleting a cancelled departure is the
+ * easiest thing in the world to do quietly, and a published minimum is worth
+ * nothing if the times it was not met can disappear — so the archive is
+ * derived from `lifecycle`, the same function the departure pages use, and the
+ * guard asserts over this and not over a second copy of the rule.
+ */
+export type CancelledDate = {
+  departure: Departure;
+  booked: number;
+  minimum: number;
+  decidedOn: string;
+};
+
+export const cancelledFor = (
+  trekId: string,
+  now: Date = new Date(),
+): CancelledDate[] =>
+  departures
+    .filter((d) => d.trekId === trekId && lifecycle(d, now) === "cancelled")
+    .sort((a, b) => a.departsOn.localeCompare(b.departsOn))
+    .map((d) => ({
+      departure: d,
+      booked: d.seatsBooked,
+      minimum: d.minimumToRun,
+      decidedOn: formatDate(d.decisionDate),
+    }));
 
 export const seatsRemaining = (d: Departure) => d.seatsTotal - d.seatsBooked;
 
