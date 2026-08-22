@@ -67,6 +67,20 @@ const PAGES: {
     name: `departure /${longest.slug}`,
     path: `/departures/${longest.slug}`,
     answersMatcher: false,
+    /*
+     * Raised from 14 in step 7, when the cost sheet took this page from 9.8 to
+     * 19.8 screens on a phone.
+     *
+     * That is a lot of page, and it is deliberate rather than accidental: the
+     * ledger, the not-included table and the contingency list are the reason
+     * anyone is on this page, and the two ways to shorten them are to collapse
+     * the ledger by default or to cut the contingencies. Both hide the thing
+     * the section exists to show.
+     *
+     * Raised to 22 rather than removed, so the page cannot keep growing without
+     * somebody deciding that it should.
+     */
+    screens: 22,
   },
   // The index, because it holds every departure and is therefore the page that
   // grows without anyone editing it.

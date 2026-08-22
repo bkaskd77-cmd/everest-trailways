@@ -75,6 +75,11 @@ for (const route of dynamicRoutes) {
   const pattern = `/${route.segments.join("/")}`;
   if (pattern === "/departures/[slug]") {
     for (const d of departures) generated.add(`/departures/${d.slug}`);
+  } else if (pattern === "/departures/[slug]/cost-sheet.pdf") {
+    // One prerendered PDF per departure, from the same array.
+    for (const d of departures) {
+      generated.add(`/departures/${d.slug}/cost-sheet.pdf`);
+    }
   } else {
     fail(
       "unresolved-dynamic",
@@ -134,13 +139,25 @@ for (const { href, source, line } of found) {
 
 /* --------------------------------------- the data's own links, checked too */
 
+/*
+ * Hrefs the data carries rather than the components do.
+ *
+ * These never appear as a literal or a template in a component — a card renders
+ * `href={departure.costSheetPdfHref}` — so the source scan above cannot see
+ * them. They are checked here against the same route table.
+ */
 for (const d of departures) {
-  const target = d.costSheetHref.split("#")[0];
-  if (!allRoutes.has(target)) {
-    fail(
-      "dead-link",
-      `${d.id} has costSheetHref "${d.costSheetHref}", and no route resolves to ${target}`,
-    );
+  for (const [field, href] of [
+    ["costSheetHref", d.costSheetHref],
+    ["costSheetPdfHref", d.costSheetPdfHref],
+  ] as const) {
+    const target = href.split("#")[0];
+    if (!allRoutes.has(target)) {
+      fail(
+        "dead-link",
+        `${d.id} has ${field} "${href}", and no route resolves to ${target}`,
+      );
+    }
   }
 }
 

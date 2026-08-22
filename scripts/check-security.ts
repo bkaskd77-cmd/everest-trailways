@@ -252,7 +252,7 @@ if (!config.includes("STATIC_SECURITY_HEADERS")) {
  * step just fixed. Each one must limit its callers and bound its input.
  */
 const routes = [...sources.keys()].filter(
-  (f) => f.startsWith("src/app/api/") && f.endsWith("/route.ts"),
+  (f) => f.startsWith("src/app/") && f.endsWith("/route.ts"),
 );
 
 if (!routes.length)
@@ -260,7 +260,21 @@ if (!routes.length)
 
 for (const route of routes) {
   const source = sources.get(route)!;
-  if (!source.includes("checkLimit(")) {
+
+  /*
+   * A prerendered route is a file on a CDN, not a function.
+   *
+   * There is no per-request work to abuse and therefore nothing for a rate
+   * limit to protect, so `force-static` exempts a route from the limiter rule —
+   * but only when it also fixes its parameters, because a static route that
+   * accepts unknown params would generate on demand and be a function after
+   * all.
+   */
+  const prerendered =
+    /dynamic\s*=\s*"force-static"/.test(source) &&
+    /dynamicParams\s*=\s*false/.test(source);
+
+  if (!prerendered && !source.includes("checkLimit(")) {
     fail("unlimited-route", `${route} does not rate limit its callers`);
   }
   // Only routes that accept a body need an input bound.
@@ -398,7 +412,9 @@ console.log(
 console.log(
   `  ok    CSP: ${REQUIRED_CSP.length} strict directives, no unsafe-eval`,
 );
-console.log(`  ok    ${routes.length} API routes, all limited and bounded`);
+console.log(
+  `  ok    ${routes.length} route handlers, all limited and bounded or prerendered`,
+);
 console.log(
   `  ok    ${Object.keys(pkg.dependencies ?? {}).length + Object.keys(pkg.devDependencies ?? {}).length} dependencies pinned`,
 );

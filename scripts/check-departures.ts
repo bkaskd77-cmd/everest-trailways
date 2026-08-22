@@ -16,6 +16,8 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { BANNED_ADJECTIVES } from "../src/content/trust-points.ts";
+import { costSheetPdf, pdfLedgerTotal } from "../src/lib/cost-sheet-pdf.ts";
 import {
   RETURN_POINTS,
   departures,
@@ -240,6 +242,238 @@ for (const d of departures) {
     fail(d.id, "duplicate-slug", `two departures share the slug "${d.slug}"`);
   }
   slugs.add(d.slug);
+}
+
+/* ------------------------------------------------------------- cost sheet */
+
+/*
+ * The cost sheet is the site's central promise, so it gets the strictest rules
+ * in this file.
+ *
+ * The sum is the whole thing. A cost sheet that does not add up to the price on
+ * the card is not a rough edge, it is the same hidden-cost problem the section
+ * exists to answer, printed in a more convincing typeface. It is checked to the
+ * dollar with integer arithmetic, not to a tolerance.
+ */
+const MARGIN_BAND = { min: 0.05, max: 0.4 };
+
+for (const d of departures) {
+  const { id, costSheet } = d;
+  const included = costSheet.lines.filter((l) => l.included);
+  const excluded = costSheet.lines.filter((l) => !l.included);
+
+  const ledger = included.reduce((sum, l) => sum + l.amountUSD, 0);
+  if (ledger !== d.priceUSD) {
+    fail(
+      id,
+      "ledger-mismatch",
+      `included lines total $${ledger} but the price is $${d.priceUSD} — off by $${ledger - d.priceUSD}`,
+    );
+  }
+
+  if (!included.length) fail(id, "no-ledger", "the cost sheet has no lines");
+  if (!excluded.length) {
+    fail(
+      id,
+      "no-excludes",
+      "nothing is listed as not included — every trip excludes something, and hiding that is the problem this section exists to solve",
+    );
+  }
+
+  for (const line of included) {
+    if (!Number.isInteger(line.amountUSD)) {
+      fail(id, "fractional-line", `"${line.label}" is $${line.amountUSD}`);
+    }
+    if (line.amountUSD < 0) {
+      fail(
+        id,
+        "negative-line",
+        `"${line.label}" is negative — the price is too low to cover the stated costs`,
+      );
+    }
+  }
+
+  /*
+   * Staff pay is its own line, never folded into a general trek cost. It is the
+   * number most easily hidden and most often squeezed, and an operator
+   * unwilling to show it is telling you something.
+   */
+  const staff = included.filter((l) => l.category === "staff");
+  if (!staff.some((l) => /guide/i.test(l.label))) {
+    fail(id, "wages-buried", "no distinct guide wage line");
+  }
+  if (staff.reduce((sum, l) => sum + l.amountUSD, 0) <= 0) {
+    fail(id, "wages-buried", "staff lines total zero");
+  }
+
+  const margin = included.find((l) => l.id === "margin");
+  if (!margin) {
+    fail(id, "no-margin", "the margin is not published as its own line");
+  } else {
+    const share = margin.amountUSD / d.priceUSD;
+    if (share < MARGIN_BAND.min || share > MARGIN_BAND.max) {
+      fail(
+        id,
+        "implausible-margin",
+        `margin is ${Math.round(share * 100)}% of the price, outside ${MARGIN_BAND.min * 100}-${MARGIN_BAND.max * 100}% — the components have drifted, and the ledger is balancing itself on a number nobody chose`,
+      );
+    }
+  }
+
+  /* ------------------------------------------------------ contingencies */
+
+  if (!costSheet.contingencies.length) {
+    fail(id, "no-contingencies", "nothing is published about what goes wrong");
+  }
+
+  // Every departure that flies to Lukla must say what happens when it does not.
+  const fliesToLukla = d.itinerary.some((day) =>
+    `${day.title} ${day.toPlace} ${day.fromPlace ?? ""}`.includes("Lukla"),
+  );
+  if (fliesToLukla) {
+    const covered = costSheet.contingencies.filter((c) =>
+      /lukla|ramechhap/i.test(`${c.id} ${c.trigger}`),
+    );
+    if (covered.length < 2) {
+      fail(
+        id,
+        "no-lukla-contingency",
+        `the itinerary flies to Lukla but only ${covered.length} cancellation contingency is published — 30-40% of peak-season flights do not go`,
+      );
+    }
+  }
+
+  for (const c of costSheet.contingencies) {
+    if (!["us", "you", "shared"].includes(c.whoPays)) {
+      fail(id, "ambiguous-who-pays", `"${c.id}" has whoPays "${c.whoPays}"`);
+    }
+    // 'shared' without an explanation is the ambiguity this rule exists to stop.
+    if (c.whoPays === "shared" && !c.note?.trim()) {
+      fail(
+        id,
+        "ambiguous-who-pays",
+        `"${c.id}" says the cost is shared without saying how it splits`,
+      );
+    }
+    if (!c.trigger.trim() || !c.likelihood.trim() || !c.whatWeDo.trim()) {
+      fail(
+        id,
+        "thin-contingency",
+        `"${c.id}" is missing trigger, likelihood or response`,
+      );
+    }
+    if (Array.isArray(c.estimatedCostUSD)) {
+      const [low, high] = c.estimatedCostUSD;
+      if (low > high) {
+        fail(id, "bad-range", `"${c.id}" has a range of $${low}-$${high}`);
+      }
+    }
+  }
+
+  /* --------------------------------------------------------- insurance */
+
+  const ins = costSheet.insuranceRequirement;
+  if (!ins.mandatory)
+    fail(id, "insurance-optional", "insurance is not required");
+  if (ins.minimumMedicalCoverUSD < 50_000) {
+    fail(
+      id,
+      "insurance-thin",
+      `minimum medical cover is $${ins.minimumMedicalCoverUSD}`,
+    );
+  }
+  if (!ins.mustCoverHelicopterEvacuation) {
+    fail(id, "insurance-thin", "helicopter evacuation is not required");
+  }
+  if (ins.mustCoverAltitudeM < d.maxAltitudeM) {
+    fail(
+      id,
+      "insurance-thin",
+      `policy must cover ${ins.mustCoverAltitudeM} m but the trek reaches ${d.maxAltitudeM} m`,
+    );
+  }
+  // The whole point: people assume weather delay is covered and it is not.
+  if (!/weather/i.test(ins.weatherDelayNote)) {
+    fail(
+      id,
+      "insurance-thin",
+      "the weather-delay position is not stated, which is the one thing travellers get wrong",
+    );
+  }
+
+  /* ---------------------------------------------------------- tipping */
+
+  const [tipLow, tipHigh] = costSheet.tipping.typicalRangeUSD;
+  if (tipLow <= 0 || tipHigh <= tipLow) {
+    fail(id, "bad-tipping", `typical range is $${tipLow}-$${tipHigh}`);
+  }
+
+  /* -------------------------------------------------------------- the PDF */
+
+  /*
+   * The document a traveller forwards to whoever is paying must carry the same
+   * total as the page they read it on. Two renderers of one dataset is exactly
+   * where a divergence hides, and this one would be invisible: the page would
+   * be right, the PDF would be wrong, and the only person to notice would be
+   * the person deciding whether to pay.
+   *
+   * The generator is run for real rather than inspected, so a crash in it fails
+   * the build here instead of at request time.
+   */
+  const pdfTotal = pdfLedgerTotal(d);
+  if (pdfTotal !== d.priceUSD) {
+    fail(
+      id,
+      "pdf-mismatch",
+      `the PDF totals $${pdfTotal} against a page price of $${d.priceUSD}`,
+    );
+  }
+  try {
+    const bytes = costSheetPdf(d, new Date("2026-01-01T00:00:00Z"));
+    if (bytes.length < 2_000) {
+      fail(id, "pdf-empty", `the generated PDF is only ${bytes.length} bytes`);
+    }
+    const head = String.fromCharCode(...bytes.slice(0, 8));
+    if (!head.startsWith("%PDF-")) {
+      fail(id, "pdf-malformed", "the generated file is not a PDF");
+    }
+  } catch (error) {
+    fail(
+      id,
+      "pdf-broken",
+      `generating the PDF threw: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  /* ------------------------------------------------------- no adjectives */
+
+  const prose = [
+    ...costSheet.lines.flatMap((l) => [
+      l.label,
+      l.note ?? "",
+      l.payableTo ?? "",
+    ]),
+    ...costSheet.contingencies.flatMap((c) => [
+      c.trigger,
+      c.likelihood,
+      c.whatWeDo,
+      c.note ?? "",
+    ]),
+    costSheet.tipping.guidance,
+    ins.weatherDelayNote,
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  for (const word of BANNED_ADJECTIVES) {
+    if (prose.includes(word.toLowerCase())) {
+      fail(
+        id,
+        "marketing-adjective",
+        `the cost sheet uses "${word}" — this section is a document, not a pitch`,
+      );
+    }
+  }
 }
 
 /* ------------------------------------------------------------ coverage rules */
@@ -599,6 +833,6 @@ if (problems.length) {
   process.exitCode = 1;
 } else {
   console.log(
-    `\n  ${departures.length} departures · feed shape ok · no problems\n`,
+    `\n  ${departures.length} departures · ${departures.reduce((n, d) => n + d.costSheet.lines.length, 0)} cost lines, every ledger balances to the dollar · ${departures.reduce((n, d) => n + d.costSheet.contingencies.length, 0)} contingencies published · feed shape ok · no problems\n`,
   );
 }

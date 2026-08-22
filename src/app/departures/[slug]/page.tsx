@@ -26,6 +26,7 @@ import { textShadowCss } from "@/lib/hero-scrim";
 import { siteConfig } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import { JsonLd } from "@/components/json-ld";
+import { CostSheetSection } from "@/components/departure/cost-sheet-section";
 
 /**
  * One departure, in full.
@@ -454,62 +455,7 @@ export default async function DeparturePage({
         </section>
 
         {/* 7 — COST SHEET PLACEHOLDER */}
-        <section
-          id="cost-sheet"
-          aria-labelledby="cost-heading"
-          className="scroll-mt-24 border-t border-border"
-        >
-          <div className="shell py-16 lg:py-20">
-            <p className="text-xs tracking-[0.24em] text-muted-foreground uppercase">
-              Cost sheet
-            </p>
-            <h2
-              id="cost-heading"
-              className="mt-4 font-display text-3xl tracking-tight lg:text-4xl"
-            >
-              ${departure.priceUSD.toLocaleString("en-GB")} all-in, per person.
-            </h2>
-
-            <div className="mt-8 grid gap-8 lg:grid-cols-2 lg:gap-16">
-              <div>
-                <h3 className="text-sm font-medium">Included</h3>
-                <ul className="mt-3 grid gap-2 text-sm text-muted-foreground">
-                  {departure.priceIncludes.map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                </ul>
-                <p className="mt-4 tabular text-sm font-medium">
-                  {departure.singleSupplementUSD === 0
-                    ? "No single supplement"
-                    : `Single supplement $${departure.singleSupplementUSD.toLocaleString("en-GB")}`}
-                </p>
-              </div>
-              <div>
-                <h3 className="text-sm font-medium">Not included</h3>
-                <ul className="mt-3 grid gap-2 text-sm text-muted-foreground">
-                  {departure.priceExcludes.map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-
-            <div className="mt-10 rounded-lg border border-dashed border-border bg-muted/40 p-6">
-              <p className="text-xs tracking-[0.18em] text-muted-foreground uppercase">
-                Arriving here
-              </p>
-              <p className="mt-3 max-w-[62ch] text-base">
-                The full itemised cost sheet — every permit, flight, wage and
-                fee listed line by line with its own figure — publishes on this
-                page. The summary above is what is settled today; the breakdown
-                behind each line is not something we are willing to approximate.
-              </p>
-              <div className="mt-5">
-                <AskPanel departure={departure} />
-              </div>
-            </div>
-          </div>
-        </section>
+        <CostSheetSection departure={departure} />
 
         {/* 8 — CLOSING */}
         <section

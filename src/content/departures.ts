@@ -1,5 +1,12 @@
+import {
+  buildCostSheet,
+  type Contingency,
+  type CostLine,
+  type CostSheet,
+} from "./cost-sheets.ts";
 import { TREKS, type ItineraryDay, type PhysicalDemand } from "./treks.ts";
 
+export type { Contingency, CostLine, CostSheet };
 export {
   RETURN_POINTS,
   TREKS,
@@ -89,6 +96,10 @@ export type Departure = {
   /** Never empty. */
   priceExcludes: string[];
   costSheetHref: string;
+  /** The same figures as a one-page PDF, prerendered at build time. */
+  costSheetPdfHref: string;
+  /** The itemised ledger. Its included lines sum to `priceUSD` exactly. */
+  costSheet: CostSheet;
   /** Anonymised. Country and count only. */
   groupSoFar: { country: string; count: number }[];
   image: { src: string; alt: string };
@@ -661,6 +672,14 @@ function compose(seed: Seed): Departure {
     returnsOn: addDays(seed.departsOn, days - 1),
     decisionDate: addDays(seed.departsOn, -DECISION_LEAD_DAYS),
     costSheetHref: `/departures/${slug}#cost-sheet`,
+    costSheetPdfHref: `/departures/${slug}/cost-sheet.pdf`,
+    // Built from the trek's cost components and this date's price, so the
+    // ledger cannot disagree with the headline number — the margin line is
+    // whatever is left, which makes the total exact by construction.
+    costSheet: buildCostSheet(seed.trekId, trek, {
+      priceUSD: seed.priceUSD,
+      days,
+    }),
   };
 }
 
