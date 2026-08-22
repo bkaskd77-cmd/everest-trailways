@@ -53,7 +53,7 @@ import { faqJsonLd } from "@/lib/departures-feed";
 import { FaqAccordion } from "@/components/departure/faq-section";
 import { OtherDates } from "@/components/departure/other-dates";
 import { PracticalitiesSection } from "@/components/departure/practicalities";
-import { TrekGallery } from "@/components/departure/trek-gallery";
+import { GallerySlider } from "@/components/departure/gallery-slider";
 
 /**
  * One departure, in full.
@@ -386,8 +386,14 @@ export default async function DeparturePage({
               trail underfoot is like.
             </SectionHead>
 
-            <div className="mt-12 lg:mt-16">
-              <TrekGallery images={departure.gallery} />
+            {/*
+              Capped, not full bleed. At 1,600px the section band is 1,425px
+              wide and a photograph stretched across all of it stops being a
+              photograph and becomes a backdrop. The slider sits on the same
+              measure as the prose above it.
+            */}
+            <div className="mt-12 max-w-5xl lg:mt-16">
+              <GallerySlider images={departure.gallery} />
             </div>
           </div>
         </section>
@@ -562,7 +568,9 @@ export default async function DeparturePage({
               here can drift out of step with the cost sheet above.
             </SectionHead>
 
-            <FaqAccordion faqs={departure.faqs} />
+            <div className="max-w-4xl">
+              <FaqAccordion faqs={departure.faqs} />
+            </div>
           </div>
         </section>
 

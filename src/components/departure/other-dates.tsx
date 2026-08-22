@@ -135,7 +135,7 @@ export function OtherDates({
           )}
         </SectionHead>
 
-        <ul className="mt-10 border-b border-border lg:mt-12">
+        <ul className="mt-10 max-w-4xl border-b border-border lg:mt-12">
           {list.map((other) => (
             <Row
               key={other.id}

@@ -53,13 +53,20 @@ export function PracticalitiesSection({
           difference between packing for it and being surprised by it.
         </SectionHead>
 
-        <dl className="mt-12 grid gap-x-14 gap-y-8 sm:grid-cols-2 lg:mt-16">
+        {/*
+          Three columns at desktop, not two.
+          Two columns of a 1,425px band gave each field a 684px cell holding
+          text capped at 58 characters — half of every cell was empty, which is
+          the fault this page keeps making. Three narrower columns put the
+          measure and the cell at roughly the same width.
+        */}
+        <dl className="mt-12 grid gap-x-12 gap-y-8 sm:grid-cols-2 lg:mt-16 lg:grid-cols-3">
           {FIELDS.map(({ key, label }) => (
             <div key={key} className="min-w-0 border-t border-border pt-5">
               <dt className="text-xs tracking-[0.18em] text-muted-foreground uppercase">
                 {label}
               </dt>
-              <dd className="mt-3 max-w-[58ch] text-base">
+              <dd className="mt-3 max-w-[46ch] text-base">
                 {practicalities[key]}
               </dd>
             </div>

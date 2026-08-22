@@ -225,12 +225,14 @@ export function CostLedger({
   priceUSD,
   caption,
   collapsible = true,
+  className,
 }: {
   lines: CostLine[];
   /** When given, a total row is drawn and shown to equal this figure. */
   priceUSD?: number;
   caption: string;
   collapsible?: boolean;
+  className?: string;
 }) {
   const groups = group(lines);
 
@@ -245,7 +247,7 @@ export function CostLedger({
   }, 0);
 
   return (
-    <table className="w-full border-collapse text-left">
+    <table className={cn("w-full border-collapse text-left", className)}>
       <caption className="sr-only">{caption}</caption>
       <colgroup>
         <col />

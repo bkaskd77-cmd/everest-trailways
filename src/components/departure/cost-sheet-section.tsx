@@ -183,6 +183,7 @@ export function CostSheetSection({ departure }: { departure: Departure }) {
         {/* 1 — THE LEDGER */}
         <div className="mt-12 lg:mt-16">
           <CostLedger
+            className="max-w-4xl"
             lines={included}
             priceUSD={departure.priceUSD}
             caption={`Itemised cost for ${departure.trekName}, departing ${departure.departsOn}. Included lines only, totalling ${money(departure.priceUSD)} per person.`}
@@ -228,7 +229,7 @@ export function CostSheetSection({ departure }: { departure: Departure }) {
               none is in the total above.
             </SectionHead>
 
-            <table className="mt-8 w-full border-collapse text-left">
+            <table className="mt-8 w-full max-w-4xl border-collapse text-left">
               <caption className="sr-only">
                 Optional extras for {departure.trekName}, not included in the{" "}
                 {money(departure.priceUSD)} total.
@@ -268,6 +269,7 @@ export function CostSheetSection({ departure }: { departure: Departure }) {
 
           <div className="mt-8">
             <CostLedger
+              className="max-w-4xl"
               lines={excluded}
               caption={`Costs not included in the price for ${departure.trekName}. Estimates.`}
               collapsible={false}
