@@ -25,6 +25,7 @@ import { siteConfig } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import { JsonLd } from "@/components/json-ld";
 import { CostSheetSection } from "@/components/departure/cost-sheet-section";
+import { GalleryGrid } from "@/components/departure/gallery-grid";
 import { RouteMap } from "@/components/departure/route-map";
 import { SectionHead } from "@/components/departure/section-head";
 import { faqJsonLd } from "@/lib/departures-feed";
@@ -331,7 +332,36 @@ export default async function DeparturePage({
           </div>
         </section>
 
-        {/* 4 — ROUTE AND ALTITUDE, read together */}
+        {/* 4 — GALLERY GRID.
+               The header slider is the first impression; this is the part
+               people read. All of it visible at once, because hiding what the
+               room looks like behind a next button is the same instinct as
+               burying the cost sheet. */}
+        <section
+          id="gallery"
+          aria-labelledby="gallery-heading"
+          className="scroll-mt-24 border-t border-border"
+        >
+          <div className="shell py-16 lg:py-20">
+            <SectionHead
+              eyebrow="What you are buying"
+              title="The room, the plate, the trail."
+              id="gallery-heading"
+            >
+              Operators publish summits. You have seen the summit. These are the
+              things people actually want to know and are slightly embarrassed
+              to ask about — where you sleep, what is on the plate, and what the
+              trail underfoot is like. Every photograph is here; none of it is
+              behind a click.
+            </SectionHead>
+
+            <div className="mt-12 lg:mt-16">
+              <GalleryGrid images={departure.gallery} />
+            </div>
+          </div>
+        </section>
+
+        {/* 5 — ROUTE AND ALTITUDE, read together */}
         <section
           aria-labelledby="altitude-heading"
           className="border-t border-border bg-band"
@@ -540,8 +570,8 @@ export default async function DeparturePage({
 
             <div className="mt-8 flex flex-wrap items-center gap-4">
               <Button asChild>
-                <Link href="#cost-sheet">
-                  {bookable ? "Reserve a seat" : "Ask about the next date"}
+                <Link href="#ask">
+                  {bookable ? "Ask about this date" : "Ask about the next date"}
                 </Link>
               </Button>
               <Link
@@ -556,7 +586,12 @@ export default async function DeparturePage({
               </Link>
             </div>
 
-            <div className="mt-8 border-t border-border pt-6">
+            {/* The target of every ask CTA on the page. Scroll margin so the
+                sticky bar does not cover it on arrival. */}
+            <div
+              id="ask"
+              className="mt-8 scroll-mt-28 border-t border-border pt-6"
+            >
               <AskPanel departure={departure} />
             </div>
           </div>

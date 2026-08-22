@@ -161,6 +161,55 @@ for (const d of departures) {
   }
 }
 
+/* ------------------------------------------------- CTAs that promise a booking */
+
+/*
+ * A link labelled "Reserve a seat" that resolves to an anchor is a lie.
+ *
+ * Both departure-page CTAs pointed at #cost-sheet. Somebody clicking "Reserve a
+ * seat" landed on a price table — a dead end that reads as a broken promise, on
+ * the one page whose entire argument is that our promises are checkable.
+ *
+ * Nothing can be reserved until a booking route exists, so until then no label
+ * may claim otherwise. When the booking flow lands, this rule stops passing by
+ * accident: the label becomes legal the moment the href is a real route.
+ */
+const BOOKING_WORDS = /\b(reserve|book now|book this|pay|checkout|buy)\b/i;
+
+/** Anchors are not destinations. A booking has to be a page. */
+const BOOKING_ROUTES = ["/book", "/booking", "/reserve", "/checkout"];
+
+/*
+ * The whole link body, not just its first text node.
+ *
+ * The first version of this stopped at the opening brace, so a label written as
+ * `{bookable ? "Reserve a seat" : "Join the waitlist"}` — which is exactly how
+ * both departure CTAs are written — was read as an empty label and waved
+ * through. A guard that cannot see the thing it is guarding is worse than none.
+ */
+const CTA = /<Link\s+href=\{?["'`]([^"'`]+)["'`]\}?[\s\S]*?<\/Link>/g;
+
+for (const file of sourceFiles) {
+  const source = await readFile(file, "utf8");
+  const rel = path.relative(root, file).replace(/\\/g, "/");
+
+  for (const match of source.matchAll(CTA)) {
+    const [body, href] = match;
+    const words = BOOKING_WORDS.exec(body);
+    if (!words) continue;
+
+    const isBookingRoute = BOOKING_ROUTES.some((route) =>
+      href.startsWith(route),
+    );
+    if (!isBookingRoute) {
+      fail(
+        "dishonest-cta",
+        `${rel} has a link saying "${words[0]}" that goes to ${href} — nothing can be reserved there, so the label promises something the site cannot do`,
+      );
+    }
+  }
+}
+
 /* ------------------------------------------------------------------ report */
 
 console.log("\n  Internal links\n");

@@ -247,7 +247,20 @@ type TrekCosts = {
   equipmentNote: string;
   /** Anything payable on arrival, which must be disclosed rather than absorbed. */
   onArrival?: { label: string; amountUSD: number; note: string };
-  contingencies: Contingency[];
+  /**
+   * Built from the trek's own facts rather than stored as prose.
+   *
+   * A function, not an array, because every sentence in here that names a
+   * height or a place has to come from this trek. Stored prose is how an
+   * Annapurna page ended up talking about Lukla.
+   */
+  contingencies: (facts: TrekFacts) => Contingency[];
+  /** Places this trek may legitimately name that are not overnight stops. */
+  namedPlaces?: string[];
+  /** The town the trip runs out of. */
+  gateway: string;
+  /** The leg weather actually threatens on this trek. */
+  disruption: { place: string; kind: "flight" | "road" };
   excludedEstimates: {
     label: string;
     amountUSD: number;
@@ -257,6 +270,36 @@ type TrekCosts = {
 };
 
 /* --------------------------------------------------------- contingencies */
+
+/**
+ * What a contingency is allowed to know about the trek it belongs to.
+ *
+ * Contingencies used to be a fixed array per trek, written by hand, carrying
+ * whatever number somebody typed. One of them said "this trek sleeps as high as
+ * 4,500 m" on a trek that sleeps at 3,580 m — 4,500 m being the day high point
+ * at a viewpoint you walk to and come down from. Confusing the sleeping
+ * altitude with the day maximum is the precise error the whole altitude profile
+ * exists to prevent, printed in the section that exists to answer it.
+ *
+ * So they are derived now, and the two numbers are separate fields that cannot
+ * be substituted for one another by accident.
+ */
+export type TrekFacts = {
+  /** The highest a night is spent. The number that governs altitude illness. */
+  highestSleepM: number;
+  /** The highest point touched on a walking day. Not where you sleep. */
+  maxAltitudeM: number;
+  /** The town the trip runs out of, for road and flight disruption prose. */
+  gateway: string;
+  /**
+   * The weather-exposed leg, where there is one.
+   *
+   * Named per trek so no shared sentence has to invent a place. An Annapurna
+   * page said "a cancelled Lukla flight is not a medical event" because that
+   * sentence was written once for Everest and reused everywhere.
+   */
+  disruption: { place: string; kind: "flight" | "road" };
+};
 
 /**
  * The Lukla set.
@@ -314,22 +357,37 @@ const LUKLA_CONTINGENCIES: Contingency[] = [
 ];
 
 /** Anything walked or driven can be closed by a landslide. */
-const ROAD_CONTINGENCY: Contingency = {
+/**
+ * Named the three roads it knew about, on every trek, including the ones that
+ * use none of them. It names this trek's own road now.
+ */
+const ROAD_CONTINGENCY = (facts: TrekFacts): Contingency => ({
   id: "road-closure",
   trigger: "A landslide or road closure blocks the route in or out.",
-  likelihood:
-    "Occasional outside monsoon; expected during and shortly after it. Most common on the Beni, Besisahar and Dhunche roads.",
+  likelihood: `Occasional outside monsoon; expected during and shortly after it. On this trip the exposed stretch is the road ${facts.disruption.kind === "road" ? `through ${facts.disruption.place}` : `out of ${facts.gateway}`}.`,
   whatWeDo:
     "We reroute, and where the detour is walkable we walk it. Extra vehicle hire and any additional nights on our itinerary are ours.",
   whoPays: "us",
   coveredByInsurance: "usually not",
-};
+});
 
-const ALTITUDE_CONTINGENCY = (altitudeM: number): Contingency => ({
+const ALTITUDE_CONTINGENCY = (facts: TrekFacts): Contingency => ({
   id: "altitude-descent",
   trigger:
     "You develop altitude sickness and the guide decides you must go down.",
-  likelihood: `Some symptoms are common above 3,000 m. This trek sleeps as high as ${altitudeM.toLocaleString("en-GB")} m.`,
+  /*
+   * Two numbers, stated as two numbers.
+   *
+   * The sleeping altitude is what governs altitude illness and the day maximum
+   * is what people remember, and they are usually different — on this trek by
+   * nearly a kilometre. Saying only the higher one overstates the risk of the
+   * nights; saying only the lower one understates the day. Both, labelled.
+   */
+  likelihood: `Some symptoms are common above 3,000 m. The highest night on this trek is ${facts.highestSleepM.toLocaleString("en-GB")} m${
+    facts.maxAltitudeM > facts.highestSleepM
+      ? `, and the highest point reached on a walking day is ${facts.maxAltitudeM.toLocaleString("en-GB")} m`
+      : ""
+  }.`,
   whatWeDo:
     "The guide's decision to descend is final and is not negotiable at any price. An assistant guide goes down with you so the rest of the group continues. Descent on foot, the escort, and your accommodation lower down are ours.",
   whoPays: "us",
@@ -421,9 +479,20 @@ const TREK_COSTS: Record<string, TrekCosts> = {
         note: "Arranged at cost if you want to guarantee getting out on a fixed day rather than wait for the weather. We take no commission on it. Price moves with demand; this is the middle of the range.",
       },
     ],
-    contingencies: [
+    gateway: "Kathmandu",
+    disruption: { place: "Lukla", kind: "flight" },
+    namedPlaces: [
+      "Lukla",
+      "Ramechhap",
+      "Khumbu",
+      "Sagarmatha",
+      "Everest",
+      "Salleri",
+      "Kala Patthar",
+    ],
+    contingencies: (facts) => [
       ...LUKLA_CONTINGENCIES,
-      ALTITUDE_CONTINGENCY(5364),
+      ALTITUDE_CONTINGENCY(facts),
       GROUP_SIZE_CONTINGENCY,
     ],
     excludedEstimates: [
@@ -483,9 +552,12 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     equipmentUSD: 38,
     equipmentNote:
       "Duffel, sleeping bag, group first aid and a pulse oximeter.",
-    contingencies: [
-      ROAD_CONTINGENCY,
-      ALTITUDE_CONTINGENCY(4130),
+    gateway: "Pokhara",
+    disruption: { place: "Beni", kind: "road" },
+    namedPlaces: ["Annapurna", "Deurali", "Machhapuchhre", "Pokhara", "Beni"],
+    contingencies: (facts) => [
+      ROAD_CONTINGENCY(facts),
+      ALTITUDE_CONTINGENCY(facts),
       GROUP_SIZE_CONTINGENCY,
       {
         id: "avalanche-risk",
@@ -555,9 +627,21 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     equipmentUSD: 52,
     equipmentNote:
       "Duffel, four-season sleeping bag, group first aid, pulse oximeter, and a portable altitude chamber for the Thorong La crossing.",
-    contingencies: [
-      ROAD_CONTINGENCY,
-      ALTITUDE_CONTINGENCY(5416),
+    gateway: "Pokhara",
+    disruption: { place: "Besisahar", kind: "road" },
+    namedPlaces: [
+      "Annapurna",
+      "Thorong La",
+      "Thorong",
+      "Mustang",
+      "Pokhara",
+      "Besisahar",
+      // The escape route when the pass is closed, so the contingency names it.
+      "Jomsom",
+    ],
+    contingencies: (facts) => [
+      ROAD_CONTINGENCY(facts),
+      ALTITUDE_CONTINGENCY(facts),
       GROUP_SIZE_CONTINGENCY,
       {
         id: "thorong-la-closed",
@@ -623,9 +707,12 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     equipmentUSD: 36,
     equipmentNote:
       "Duffel, sleeping bag, group first aid and a pulse oximeter.",
-    contingencies: [
-      ROAD_CONTINGENCY,
-      ALTITUDE_CONTINGENCY(4984),
+    gateway: "Kathmandu",
+    disruption: { place: "Dhunche", kind: "road" },
+    namedPlaces: ["Langtang", "Dhunche"],
+    contingencies: (facts) => [
+      ROAD_CONTINGENCY(facts),
+      ALTITUDE_CONTINGENCY(facts),
       GROUP_SIZE_CONTINGENCY,
     ],
     excludedEstimates: [
@@ -687,7 +774,10 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     equipmentUSD: 44,
     equipmentNote:
       "Duffel, sleeping bag, group first aid, pulse oximeter and wind shell for the valley afternoons.",
-    contingencies: [
+    gateway: "Pokhara",
+    disruption: { place: "Jomsom", kind: "flight" },
+    namedPlaces: ["Mustang", "Kali Gandaki", "Pokhara", "Annapurna", "Jomsom"],
+    contingencies: (facts) => [
       {
         id: "jomsom-wind",
         trigger: "The Jomsom flight does not go, in either direction.",
@@ -699,8 +789,8 @@ const TREK_COSTS: Record<string, TrekCosts> = {
         estimatedCostUSD: 160,
         coveredByInsurance: "usually not",
       },
-      ROAD_CONTINGENCY,
-      ALTITUDE_CONTINGENCY(3840),
+      ROAD_CONTINGENCY(facts),
+      ALTITUDE_CONTINGENCY(facts),
       GROUP_SIZE_CONTINGENCY,
     ],
     excludedEstimates: [
@@ -753,8 +843,11 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     trekkersPerPorter: 3,
     equipmentUSD: 24,
     equipmentNote: "Duffel, sleeping bag and group first aid.",
-    contingencies: [
-      ROAD_CONTINGENCY,
+    gateway: "Pokhara",
+    disruption: { place: "Beni", kind: "road" },
+    namedPlaces: ["Annapurna", "Poon Hill", "Ghorepani", "Pokhara", "Beni"],
+    contingencies: (facts) => [
+      ROAD_CONTINGENCY(facts),
       GROUP_SIZE_CONTINGENCY,
       {
         id: "poon-hill-cloud",
@@ -814,9 +907,12 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     equipmentUSD: 34,
     equipmentNote:
       "Duffel, sleeping bag, group first aid and a pulse oximeter.",
-    contingencies: [
-      ROAD_CONTINGENCY,
-      ALTITUDE_CONTINGENCY(4500),
+    gateway: "Pokhara",
+    disruption: { place: "Kande", kind: "road" },
+    namedPlaces: ["Annapurna", "Mardi", "Pokhara", "Kande", "Machhapuchhre"],
+    contingencies: (facts) => [
+      ROAD_CONTINGENCY(facts),
+      ALTITUDE_CONTINGENCY(facts),
       GROUP_SIZE_CONTINGENCY,
       {
         id: "high-camp-full",
@@ -875,9 +971,12 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     trekkersPerPorter: 0,
     equipmentUSD: 20,
     equipmentNote: "Binoculars, group first aid and leech socks in season.",
-    contingencies: [
+    gateway: "Kathmandu",
+    disruption: { place: "Mugling", kind: "road" },
+    namedPlaces: ["Chitwan", "Rapti", "Terai", "Tharu", "Mugling", "Bardia"],
+    contingencies: (facts) => [
       WILDLIFE_CONTINGENCY,
-      ROAD_CONTINGENCY,
+      ROAD_CONTINGENCY(facts),
       GROUP_SIZE_CONTINGENCY,
       {
         id: "park-closure",
@@ -941,9 +1040,12 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     trekkersPerPorter: 0,
     equipmentUSD: 24,
     equipmentNote: "Binoculars, group first aid and leech socks in season.",
-    contingencies: [
+    gateway: "Kathmandu",
+    disruption: { place: "Nepalgunj", kind: "flight" },
+    namedPlaces: ["Bardia", "Karnali", "Nepalgunj", "Terai", "Chitwan"],
+    contingencies: (facts) => [
       WILDLIFE_CONTINGENCY,
-      ROAD_CONTINGENCY,
+      ROAD_CONTINGENCY(facts),
       GROUP_SIZE_CONTINGENCY,
       {
         id: "nepalgunj-flight",
@@ -999,7 +1101,18 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     trekkersPerPorter: 0,
     equipmentUSD: 12,
     equipmentNote: "Group first aid and a day pack if you need one.",
-    contingencies: [
+    gateway: "Kathmandu",
+    disruption: { place: "Sundarijal", kind: "road" },
+    namedPlaces: [
+      "Kathmandu",
+      "Shivapuri",
+      "Nagarjun",
+      "Bhaktapur",
+      "Changu Narayan",
+      "Thamel",
+      "Sundarijal",
+    ],
+    contingencies: (facts) => [
       GROUP_SIZE_CONTINGENCY,
       {
         id: "valley-air",
@@ -1012,7 +1125,7 @@ const TREK_COSTS: Record<string, TrekCosts> = {
         whoPays: "us",
         coveredByInsurance: "usually not",
       },
-      ROAD_CONTINGENCY,
+      ROAD_CONTINGENCY(facts),
     ],
     excludedEstimates: [
       {
@@ -1102,6 +1215,21 @@ export function buildCostSheet(
 ): CostSheet {
   const costs = TREK_COSTS[trekId];
   if (!costs) throw new Error(`no cost profile for trek "${trekId}"`);
+
+  /*
+   * Read off the itinerary, not typed.
+   *
+   * `highestSleepM` is the maximum of the nights; `maxAltitudeM` is the highest
+   * point on a walking day. On Mardi Himal those are 3,580 m and 4,500 m, and
+   * the old hand-written contingency used the second while calling it the
+   * first. Deriving both removes the chance to confuse them again.
+   */
+  const facts: TrekFacts = {
+    highestSleepM: Math.max(...trek.itinerary.map((day) => day.sleepAltitudeM)),
+    maxAltitudeM: trek.maxAltitudeM,
+    gateway: costs.gateway,
+    disruption: costs.disruption,
+  };
 
   // "1:4" — one guide to four trekkers, so each trekker carries a quarter of a
   // guide's day rate. Costed on the ratio rather than on the actual group size,
@@ -1412,7 +1540,7 @@ export function buildCostSheet(
 
   return {
     lines,
-    contingencies: costs.contingencies,
+    contingencies: costs.contingencies(facts),
     optionalExtras,
     /*
      * We absorb it. If five people book a departure costed at fourteen, the
@@ -1433,8 +1561,33 @@ export function buildCostSheet(
       minimumMedicalCoverUSD: 100_000,
       mustCoverHelicopterEvacuation: true,
       mustCoverAltitudeM: Math.max(3000, trek.maxAltitudeM),
-      weatherDelayNote:
-        "Most policies cover medical evacuation and do not cover weather delay. A cancelled Lukla flight is not a medical event, and a policy sold as trekking cover will often pay nothing towards a missed connection or an extra night in a lodge. If that matters to you, look for travel disruption cover specifically, and read what it excludes rather than what it advertises.",
+      /*
+       * Names this trek's own weather-exposed leg.
+       *
+       * This sentence said "a cancelled Lukla flight" on every departure,
+       * including the ones that never go near Lukla. It was written once for
+       * Everest and reused, which is the same fault as the Ramechhap season
+       * claim in step 7a: shared prose that names a place.
+       */
+      weatherDelayNote: `Most policies cover medical evacuation and do not cover weather delay. ${
+        costs.disruption.kind === "flight"
+          ? `A cancelled ${costs.disruption.place} flight is not a medical event`
+          : `A road closed at ${costs.disruption.place} is not a medical event`
+      }, and a policy sold as trekking cover will often pay nothing towards a missed connection or an extra night. If that matters to you, look for travel disruption cover specifically, and read what it excludes rather than what it advertises.`,
     },
   };
 }
+
+/**
+ * Places each trek may legitimately name, beyond its own overnight stops.
+ *
+ * Read by `check:departures`, which fails on any rendered sentence naming a
+ * place outside this set plus the itinerary. Gateways, ranges and the road or
+ * airstrip that weather actually threatens all live here.
+ */
+export const TREK_NAMED_PLACES: Record<string, string[]> = Object.fromEntries(
+  Object.entries(TREK_COSTS).map(([id, costs]) => [
+    id,
+    costs.namedPlaces ?? [],
+  ]),
+);

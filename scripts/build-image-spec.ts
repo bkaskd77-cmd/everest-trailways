@@ -186,7 +186,7 @@ for (const file of sourceFiles) {
   }
 
   // A hand-written `sizes` is the same fault wearing a different hat.
-  if (/sizes="/.test(source) && !DIRECT_IMAGE_ALLOWED.has(rel)) {
+  if (/\bsizes="/.test(source) && !DIRECT_IMAGE_ALLOWED.has(rel)) {
     problems.push(
       `${rel} sets sizes by hand — that belongs in src/lib/image-slots.ts`,
     );

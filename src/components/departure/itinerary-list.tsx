@@ -38,7 +38,28 @@ const STAY_ICON = {
   camp: Tent,
 } as const;
 
-const MEAL_LETTER = { breakfast: "B", lunch: "L", dinner: "D" } as const;
+/**
+ * Meals, in words.
+ *
+ * This rendered as "BLD" with a screen-reader-only "Meals included:" in front
+ * of it. Somebody who has been on an organised trek reads BLD instantly and
+ * somebody who has not reads three letters — and the people this page is
+ * written for are the ones who have not been.
+ */
+const MEAL_WORD = {
+  breakfast: "Breakfast",
+  lunch: "lunch",
+  dinner: "dinner",
+} as const;
+
+/** "Breakfast, lunch and dinner" rather than "BLD". */
+function mealList(
+  meals: readonly ("breakfast" | "lunch" | "dinner")[],
+): string {
+  const words = meals.map((meal) => MEAL_WORD[meal]);
+  if (words.length === 1) return words[0];
+  return `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
+}
 
 function DayRow({
   day,
@@ -101,7 +122,7 @@ function DayRow({
               <span className="inline-flex items-center gap-1">
                 <Utensils aria-hidden className="size-3" />
                 <span className="sr-only">Meals included: </span>
-                {day.meals.map((meal) => MEAL_LETTER[meal]).join("")}
+                {mealList(day.meals)}
               </span>
               {day.isAcclimatisation && (
                 <span className="font-medium text-verified">

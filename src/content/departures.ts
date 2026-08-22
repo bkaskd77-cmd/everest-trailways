@@ -10,6 +10,8 @@ import {
   GALLERIES,
   PRACTICALITIES,
   buildFaqs,
+  isTeahouseTrek,
+  roomSharingLine,
   type Faq,
   type GalleryImage,
   type Practicalities,
@@ -718,6 +720,18 @@ function compose(seed: Seed): Departure {
    * is only possible if the departure is complete before the answers are
    * written, hence the second pass rather than a single object literal.
    */
+  /*
+   * The room-sharing line is derived, not stored.
+   *
+   * It has to agree with `singleSupplementUSD`, and stored prose did not: three
+   * sections of one page disagreed about whether a single room was an option,
+   * an extra, or included. One fact, three sentences derived from it.
+   */
+  composed.practicalities = {
+    ...composed.practicalities,
+    roomSharing: roomSharingLine(composed, isTeahouseTrek(seed.trekId)),
+  };
+
   composed.faqs = buildFaqs(composed);
   return composed;
 }

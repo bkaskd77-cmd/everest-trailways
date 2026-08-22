@@ -94,8 +94,8 @@ export function GlanceBar({
               </div>
 
               <Button asChild size="sm">
-                <Link href="#cost-sheet">
-                  {bookable ? "Reserve a seat" : "Join the waitlist"}
+                <Link href="#ask">
+                  {bookable ? "Ask about this date" : "Ask about the next date"}
                 </Link>
               </Button>
             </div>

@@ -283,11 +283,18 @@ export function CostSheetSection({ departure }: { departure: Departure }) {
 
         {/* 3 — WHEN THINGS GO WRONG */}
         <div className="mt-16 lg:mt-20">
+          {/*
+            No place name in shared prose.
+            This paragraph named Ramechhap on every departure, including the
+            ones that go nowhere near it — Ramechhap serves Lukla, and an
+            Annapurna trek starts from Pokhara. The sentence makes the same
+            point without borrowing somebody else's road.
+          */}
           <SectionHead level="h3" title="When things go wrong.">
             We publish this because most operators do not, and because the
-            alternative is finding out at one in the morning on the road to
-            Ramechhap. Each of these has happened. For each one, here is what we
-            do and who pays.
+            alternative is finding out at one in the morning, at the roadside,
+            on the day it happens. Each of these has happened. For each one,
+            here is what we do and who pays.
           </SectionHead>
 
           <ul className="mt-10">

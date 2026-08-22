@@ -182,10 +182,16 @@ export function DepartureHeroSlider({
             className="w-full max-w-[62ch] text-sm text-glacier/85 lg:ml-auto lg:w-auto lg:max-w-[46ch] lg:text-right"
             style={{ textShadow: textShadowCss("small") }}
           >
-            <span className="block text-xs tracking-[0.14em] text-glacier/60 uppercase">
+            {/*
+              The label is its own line. Rendered as adjacent inline text it
+              read "Where you sleepA standard twin teahouse room" — the same
+              fault as "Payable to paid by us", two strings joined with nothing
+              between them.
+            */}
+            <span className="mb-1 block text-xs tracking-[0.14em] text-glacier/60 uppercase">
               {CATEGORY_LABEL[current.category]}
             </span>
-            {current.caption}
+            <span className="block">{current.caption}</span>
           </p>
         </div>
       </div>

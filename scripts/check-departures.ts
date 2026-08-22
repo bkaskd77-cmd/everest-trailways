@@ -17,6 +17,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { BANNED_ADJECTIVES } from "../src/content/trust-points.ts";
+import { PLACES } from "../src/content/places.ts";
+import { TREK_NAMED_PLACES } from "../src/content/cost-sheets.ts";
 import { costSheetPdf, pdfLedgerTotal } from "../src/lib/cost-sheet-pdf.ts";
 import {
   RETURN_POINTS,
@@ -841,6 +843,254 @@ for (const d of departures) {
         id,
         "faq-contradiction",
         "an answer refers to a decision date it does not state",
+      );
+    }
+  }
+}
+
+/* ------------------------------------------------- regional boilerplate */
+
+/*
+ * No sentence may name a place that is not this departure's.
+ *
+ * Three Everest strings were rendering on an Annapurna page: charging priced
+ * "above Namche", a contingency intro about "the road to Ramechhap", and an
+ * insurance note calling a cancelled Lukla flight not a medical event. None of
+ * those places is on that trek. Each had been written once for Everest and
+ * reused as shared prose, which is the same fault as the Ramechhap season claim
+ * caught in step 7a — and shared prose that names a location will always leak,
+ * because the sharing is the point and the naming is incompatible with it.
+ *
+ * So: gather every place name the site knows, gather what this departure may
+ * legitimately name, and fail on the difference. A shared sentence can then
+ * only survive by not naming anywhere.
+ */
+const KNOWN_PLACES = [
+  ...Object.keys(PLACES),
+  // Regions, ranges and gateways that are not overnight stops but do get named.
+  "Lukla",
+  "Ramechhap",
+  "Manthali",
+  "Khumbu",
+  "Sagarmatha",
+  "Everest",
+  "Salleri",
+  "Jiri",
+  "Kala Patthar",
+  "Annapurna",
+  "Machhapuchhre",
+  "Deurali",
+  "Thorong",
+  "Mardi",
+  "Poon Hill",
+  "Mustang",
+  "Kali Gandaki",
+  "Langtang",
+  "Dhunche",
+  "Beni",
+  "Kande",
+  "Nepalgunj",
+  "Mugling",
+  "Sundarijal",
+  "Chitwan",
+  "Bardia",
+  "Karnali",
+  "Rapti",
+  "Terai",
+  "Shivapuri",
+  "Nagarjun",
+  "Bhaktapur",
+  "Changu Narayan",
+  "Thamel",
+  "Tharu",
+  "Namche",
+  "Gorakshep",
+];
+
+for (const d of departures) {
+  const { id } = d;
+
+  /* What this departure is allowed to say. */
+  const allowed = new Set<string>();
+  const allow = (text: string) => {
+    for (const place of KNOWN_PLACES) {
+      if (text.includes(place)) allowed.add(place);
+    }
+  };
+
+  allow(d.region);
+  allow(d.trekName);
+  for (const day of d.itinerary) {
+    allow(day.toPlace);
+    allow(day.fromPlace ?? "");
+    allow(day.title);
+  }
+  for (const place of TREK_NAMED_PLACES[d.trekId] ?? []) allowed.add(place);
+
+  /*
+   * Everything the page renders, in one bag.
+   *
+   * Cost-line labels and notes are included because that is where the transport
+   * legs are described, and they are the most place-dense prose on the page.
+   */
+  const rendered: [string, string][] = [
+    ["summary", d.summary],
+    ...Object.entries(d.practicalities).map(
+      ([field, value]) =>
+        [`practicalities.${field}`, value] as [string, string],
+    ),
+    ...d.faqs.map(
+      (faq, i) =>
+        [`faq[${i}]`, `${faq.question} ${faq.answer}`] as [string, string],
+    ),
+    ...d.costSheet.contingencies.map(
+      (c) =>
+        [
+          `contingency ${c.id}`,
+          `${c.trigger} ${c.likelihood} ${c.whatWeDo} ${c.note ?? ""}`,
+        ] as [string, string],
+    ),
+    ...d.costSheet.lines.map(
+      (line, i) =>
+        [
+          `cost line ${line.id || i}`,
+          `${line.label} ${line.note ?? ""} ${line.payableTo ?? ""}`,
+        ] as [string, string],
+    ),
+    ...d.costSheet.optionalExtras.map(
+      (extra) =>
+        [`extra ${extra.id}`, `${extra.label} ${extra.note ?? ""}`] as [
+          string,
+          string,
+        ],
+    ),
+    ...d.gallery.map(
+      (image, i) => [`gallery[${i}]`, image.caption] as [string, string],
+    ),
+    ["tipping", d.costSheet.tipping.guidance],
+    ["insurance", d.costSheet.insuranceRequirement.weatherDelayNote],
+  ];
+
+  for (const [where, text] of rendered) {
+    for (const place of KNOWN_PLACES) {
+      if (!text.includes(place)) continue;
+      if (allowed.has(place)) continue;
+      fail(
+        id,
+        "foreign-place",
+        `${where} names "${place}", which is not on this trek — shared prose must not name a location`,
+      );
+    }
+  }
+
+  /* ------------------------------------------------ sleeping vs maximum */
+
+  /*
+   * The two altitudes are different numbers and the page must not swap them.
+   * A contingency said "this trek sleeps as high as 4,500 m" on a trek whose
+   * highest night is 3,580 m; 4,500 m is a viewpoint you walk up to and come
+   * back down from. That is the exact confusion the altitude profile exists to
+   * prevent, printed in the section that exists to answer it.
+   */
+  const highestSleep = Math.max(
+    ...d.itinerary.map((day) => day.sleepAltitudeM),
+  );
+  const sleepClaim = /sleeps? (?:as high as|no higher than|at) ([\d,]+) ?m/gi;
+
+  for (const [where, text] of rendered) {
+    for (const match of text.matchAll(sleepClaim)) {
+      const claimed = Number(match[1].replace(/,/g, ""));
+      if (claimed !== highestSleep) {
+        fail(
+          id,
+          "altitude-confusion",
+          `${where} says the trek sleeps at ${claimed} m; the highest night is ${highestSleep} m${claimed === d.maxAltitudeM ? " — that is the day maximum, not a sleeping altitude" : ""}`,
+        );
+      }
+    }
+  }
+
+  /* ------------------------------------------------------- single rooms */
+
+  /*
+   * One fact, three sentences. Practicalities, the optional extras table and
+   * the FAQ all described the single room and disagreed: an option that did not
+   * exist, no extra listed, and a room said to be included in the price.
+   */
+  const hasSingle = d.singleSupplementUSD > 0;
+  const singleExtra = d.costSheet.optionalExtras.find(
+    (e) => e.id === "single-room",
+  );
+  const roomText = d.practicalities.roomSharing;
+  const singleFaq = d.faqs.find((f) => /single room/i.test(f.question));
+
+  if (hasSingle && !singleExtra) {
+    fail(
+      id,
+      "single-room-contradiction",
+      "there is a single supplement but no single-room optional extra",
+    );
+  }
+  if (!hasSingle && singleExtra) {
+    fail(
+      id,
+      "single-room-contradiction",
+      "a single-room extra is listed but singleSupplementUSD is 0",
+    );
+  }
+  if (!hasSingle && /unless you take the single room option/i.test(roomText)) {
+    fail(
+      id,
+      "single-room-contradiction",
+      "practicalities offer a single-room option on a departure that has none",
+    );
+  }
+  if (hasSingle && /no single supplement/i.test(roomText)) {
+    fail(
+      id,
+      "single-room-contradiction",
+      `practicalities say there is no single supplement, but it is $${d.singleSupplementUSD}`,
+    );
+  }
+  if (singleFaq) {
+    const saysIncluded = /is included in the/i.test(singleFaq.answer);
+    if (hasSingle && saysIncluded) {
+      fail(
+        id,
+        "single-room-contradiction",
+        "the FAQ says a single room is included when it costs extra",
+      );
+    }
+    if (
+      !hasSingle &&
+      !saysIncluded &&
+      !/no single supplement/i.test(singleFaq.answer)
+    ) {
+      fail(
+        id,
+        "single-room-contradiction",
+        "the FAQ does not say the single room is included on a departure with no supplement",
+      );
+    }
+  }
+
+  /* ------------------------------------------------ punctuation and units */
+
+  for (const [where, text] of rendered) {
+    if (/[.!?]\s*[.!?]/.test(text)) {
+      fail(
+        id,
+        "double-punctuation",
+        `${where} has doubled punctuation — a stored sentence was concatenated with a template that added its own stop`,
+      );
+    }
+    // "walking 4-7 a day" — the unit went missing between the field and the
+    // sentence that used it.
+    if (/\d\s*[-–]\s*\d\s+a day/.test(text)) {
+      fail(
+        id,
+        "missing-unit",
+        `${where} states a range "a day" with no unit — hours, kilometres, something`,
       );
     }
   }

@@ -65,6 +65,15 @@ export type GalleryImage = {
 
 export type Practicalities = {
   accommodation: string;
+  /**
+   * How rooms are shared.
+   *
+   * Built per departure rather than stored, because it has to agree with
+   * `singleSupplementUSD`. It previously said "unless you have taken the single
+   * room option" on departures that have no such option and include a single
+   * room in the price — three sections of one page contradicting each other
+   * about the same thing.
+   */
   roomSharing: string;
   toilets: string;
   showers: string;
@@ -400,7 +409,7 @@ const TEAHOUSE_PRACTICALITIES: Practicalities = {
   water:
     "We provide treated water at every stop, either boiled or filtered and chemically treated. Do not drink untreated tap or stream water. Bottled water is sold and we ask you not to buy it: there is no way to remove the plastic from the valley.",
   electricity:
-    "Charging is available at most lodges and it usually costs money — $2–4 an hour above Namche or equivalent. Plugs are shared and there may be one socket for the room. Bring a power bank; it is cheaper and it works when the lodge solar does not.",
+    "Charging is available at most lodges and it usually costs money once you are above about 3,000 m — $2–4 an hour is normal. Plugs are shared and there may be one socket for the room. Bring a power bank; it is cheaper and it works when the lodge solar does not.",
   signal:
     "Patchy. Ncell and NTC cover parts of the main valleys and there are stretches of a day or more with nothing. Lodge wifi exists higher up and is sold by the hour or by the device, usually $3–5, and is often too slow to load a photograph.",
   luggage:
@@ -517,6 +526,18 @@ export const PRACTICALITIES: Record<string, Practicalities> = {
 const money = (n: number) => `$${n.toLocaleString("en-GB")}`;
 
 /**
+ * One sentence, ending in exactly one full stop.
+ *
+ * Joining two stored fields produced "on the same ground.. Five walking days" —
+ * the terrain string already ends in a stop and the template added another.
+ * Every template that concatenates stored prose goes through here.
+ */
+function sentence(text: string): string {
+  const trimmed = text.trim();
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
+/**
  * Built per departure, not per trek.
  *
  * The answers quote this date's price, this date's supplement and this date's
@@ -524,15 +545,35 @@ const money = (n: number) => `$${n.toLocaleString("en-GB")}`;
  * same page. `check:departures` re-reads the numbers out of the answers and
  * fails if any of them contradicts the departure.
  */
-export function buildFaqs(d: Departure): Faq[] {
-  const single = d.costSheet.optionalExtras.find((e) => e.id === "single-room");
-  const teahouse = [
+/**
+ * The room-sharing sentence, derived from the supplement.
+ *
+ * `hasSingleOption` is the single fact everything about single rooms comes
+ * from: the practicalities line, the optional extra, and the FAQ answer.
+ */
+export function roomSharingLine(d: Departure, teahouse: boolean): string {
+  if (d.singleSupplementUSD > 0) {
+    return teahouse
+      ? "Twin share with someone of the same sex from the group unless you take the single room option. On the two or three busiest nights high on the route there may be no single available at any price, and you are not charged for those nights."
+      : "Twin share with someone of the same sex from the group unless you take the single room option, which is available every night on this trip.";
+  }
+  return teahouse
+    ? "Twin share with someone of the same sex from the group. There is no single supplement on this departure — where the accommodation has a single room you get one at no extra cost, and on the busiest nights high on the route nobody does."
+    : "Twin share with someone of the same sex from the group. There is no single supplement on this departure — a single room is included in the price where the accommodation has one.";
+}
+
+/** Whether this trek sleeps in teahouses rather than lodges or hotels. */
+export function isTeahouseTrek(trekId: string): boolean {
+  return ![
     "chitwan-safari",
     "bardia-wildlife",
     "kathmandu-valley-rim",
-  ].includes(d.trekId)
-    ? false
-    : true;
+  ].includes(trekId);
+}
+
+export function buildFaqs(d: Departure): Faq[] {
+  const single = d.costSheet.optionalExtras.find((e) => e.id === "single-room");
+  const teahouse = isTeahouseTrek(d.trekId);
 
   return [
     {
@@ -574,7 +615,7 @@ export function buildFaqs(d: Departure): Faq[] {
     },
     {
       question: "What age and fitness should I expect on this date?",
-      answer: `We do not screen by age and we do not publish other travellers' details. What we can say about this departure: it is ${d.difficulty}, walking ${d.physicalDemand.walkingHoursPerDay} a day for ${d.physicalDemand.consecutiveDays} consecutive days on ${d.physicalDemand.terrain}. ${d.physicalDemand.preparationNote} Groups on this kind of trip usually run from late twenties to sixties, with most people in their thirties and forties.`,
+      answer: `We do not screen by age and we do not publish other travellers' details. What we can say about this departure: it is ${d.difficulty}, walking ${d.physicalDemand.walkingHoursPerDay} hours a day for ${d.physicalDemand.consecutiveDays} consecutive days. ${sentence(d.physicalDemand.terrain)} ${sentence(d.physicalDemand.preparationNote)} Groups on this kind of trip usually run from late twenties to sixties, with most people in their thirties and forties.`,
     },
     {
       question: "What happens to my money if I cancel?",
@@ -594,7 +635,7 @@ export function buildFaqs(d: Departure): Faq[] {
     },
     {
       question: "How fit do I actually need to be?",
-      answer: `Fit enough to walk ${d.physicalDemand.walkingHoursPerDay} a day, ${d.physicalDemand.consecutiveDays} days running, carrying only a day pack. ${d.physicalDemand.preparationNote} This is not a technical trip — there is no climbing, no rope and no equipment to learn. The people who struggle are usually the ones who did no hill walking beforehand rather than the ones who are not athletic.`,
+      answer: `Fit enough to walk ${d.physicalDemand.walkingHoursPerDay} hours a day, ${d.physicalDemand.consecutiveDays} days running, carrying only a day pack. ${sentence(d.physicalDemand.preparationNote)} This is not a technical trip — there is no climbing, no rope and no equipment to learn. The people who struggle are usually the ones who did no hill walking beforehand rather than the ones who are not athletic.`,
     },
     {
       question: "Do I need to tip, and how much?",
