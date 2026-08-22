@@ -306,9 +306,9 @@ for (const d of departures) {
     fail(id, "wages-buried", "staff lines total zero");
   }
 
-  const margin = included.find((l) => l.id === "margin");
+  const margin = included.find((l) => l.id === "fee");
   if (!margin) {
-    fail(id, "no-margin", "the margin is not published as its own line");
+    fail(id, "no-fee", "the company fee is not published as its own line");
   } else {
     const share = margin.amountUSD / d.priceUSD;
     if (share < MARGIN_BAND.min || share > MARGIN_BAND.max) {
@@ -408,6 +408,146 @@ for (const d of departures) {
     fail(id, "bad-tipping", `typical range is $${tipLow}-$${tipHigh}`);
   }
 
+  /* ------------------------------------------------ basis and arithmetic */
+
+  /*
+   * The basis and the amount have to agree, and the arithmetic has to be
+   * reproducible.
+   *
+   * The accommodation line said "$114" and "per day" beside each other when
+   * $114 was three nights at $38. Nobody was misled about the total, but a
+   * reader auditing us hit an internal contradiction on the second row, which
+   * is worse than a wrong number — it tells them the sheet was not read by
+   * anyone who cared.
+   */
+  for (const line of costSheet.lines) {
+    const hasUnits =
+      line.unitAmountUSD !== undefined && line.unitCount !== undefined;
+
+    if (line.basis === "per-day" && !hasUnits) {
+      fail(
+        id,
+        "basis-mismatch",
+        `"${line.label}" is billed per day but carries no unit rate or count, so its amount cannot be checked`,
+      );
+    }
+    if (line.basis === "per-group" && line.dividedBy === undefined) {
+      fail(
+        id,
+        "basis-mismatch",
+        `"${line.label}" is a divided group cost but does not say what it is divided by`,
+      );
+    }
+    if (hasUnits && !line.unitLabel) {
+      fail(
+        id,
+        "basis-mismatch",
+        `"${line.label}" has a unit count but no unit`,
+      );
+    }
+
+    // Re-derive it. Rounding is to the dollar, so allow exactly that much.
+    if (hasUnits) {
+      const gross = line.unitAmountUSD! * line.unitCount!;
+      const expected = Math.round(gross / (line.dividedBy ?? 1));
+      if (Math.abs(expected - line.amountUSD) > 1) {
+        fail(
+          id,
+          "arithmetic",
+          `"${line.label}" states ${line.unitAmountUSD} x ${line.unitCount}${line.dividedBy ? ` / ${line.dividedBy}` : ""} = $${expected}, but the amount is $${line.amountUSD}`,
+        );
+      }
+    }
+  }
+
+  /* ------------------------------------------------- the Ramechhap claim */
+
+  /*
+   * A departure that charges for a Ramechhap transfer says on the page that
+   * peak season applies to it. That was asserted rather than checked, and it
+   * was wrong: the March Everest date fell outside the months the note named.
+   * A cost sheet that contradicts its own dataset is the exact failure this
+   * section exists to argue against, so the claim is now derived from the
+   * departure date.
+   *
+   * Ramechhap operations run roughly mid-March to May and October to November.
+   */
+  const RAMECHHAP_MONTHS = [2, 3, 4, 9, 10];
+  const ramechhap = costSheet.lines.find((l) => /Ramechhap/i.test(l.label));
+  if (ramechhap) {
+    const month = new Date(d.departsOn).getUTCMonth();
+    if (!RAMECHHAP_MONTHS.includes(month)) {
+      fail(
+        id,
+        "ramechhap-claim",
+        `charges for a Ramechhap transfer but departs ${d.departsOn}, outside the season the note claims`,
+      );
+    }
+  }
+
+  /* -------------------------------------------------- shared cost policy */
+
+  const divided = costSheet.lines.filter((l) => l.dividedBy !== undefined);
+  if (divided.length > 0 && !costSheet.sharedCostPolicy) {
+    fail(
+      id,
+      "no-shared-policy",
+      "shared costs are divided at the group cap and nothing says what happens when the group is smaller",
+    );
+  }
+
+  /* ------------------------------------------------------ optional extras */
+
+  if (d.singleSupplementUSD > 0) {
+    const match = costSheet.optionalExtras.find(
+      (e) => e.amountUSD === d.singleSupplementUSD,
+    );
+    if (!match) {
+      fail(
+        id,
+        "supplement-missing",
+        `the card advertises a $${d.singleSupplementUSD} single supplement and no optional extra matches it`,
+      );
+    }
+  }
+  for (const extra of costSheet.optionalExtras) {
+    if (!Number.isInteger(extra.amountUSD) || extra.amountUSD <= 0) {
+      fail(id, "bad-extra", `"${extra.label}" is $${extra.amountUSD}`);
+    }
+  }
+
+  /* --------------------------------------------- the admin split is honest */
+
+  /*
+   * "Margin" bundled three genuine costs with the profit and then gave the
+   * total the least flattering name available. Each of these has to exist
+   * separately so the fee can be small and honest rather than large and vague.
+   */
+  for (const required of [
+    "reserve",
+    "guarantee-reserve",
+    "licences",
+    "office",
+    "fee",
+  ]) {
+    if (!costSheet.lines.some((l) => l.id === required && l.included)) {
+      fail(
+        id,
+        "admin-not-split",
+        `the operating block has no "${required}" line — it must not be one bundled figure`,
+      );
+    }
+  }
+
+  const feeLine = costSheet.lines.find((l) => l.id === "fee");
+  if (feeLine && /margin/i.test(feeLine.label)) {
+    fail(
+      id,
+      "admin-not-split",
+      "the fee line is called margin again, which is a word that means several things",
+    );
+  }
+
   /* -------------------------------------------------------------- the PDF */
 
   /*
@@ -443,6 +583,28 @@ for (const d of departures) {
       "pdf-broken",
       `generating the PDF threw: ${error instanceof Error ? error.message : String(error)}`,
     );
+  }
+
+  /* ------------------------------------------------ the intro names real lines */
+
+  /*
+   * The section's opening sentence says the sheet runs "from X to Y", naming
+   * two lines. It used to name the porters' day rate on every departure,
+   * including the ones with no porters. Copy that cites a line has to be built
+   * from the lines.
+   */
+  const introSource = costSheet.lines.filter((l) => l.included);
+  if (introSource.length < 2) {
+    fail(id, "intro-unsupported", "too few lines to describe the sheet");
+  } else {
+    const beforeAdmin = introSource.filter((l) => l.category !== "admin");
+    if (!beforeAdmin.length) {
+      fail(
+        id,
+        "intro-unsupported",
+        "every line is an operating line, so the intro has nothing real to point at",
+      );
+    }
   }
 
   /* ------------------------------------------------------- no adjectives */

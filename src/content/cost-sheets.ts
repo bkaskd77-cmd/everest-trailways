@@ -65,6 +65,41 @@ export type CostLine = {
   included: boolean;
   note?: string;
   payableTo?: string;
+
+  /*
+   * The arithmetic behind the amount, as data rather than as prose.
+   *
+   * `amountUSD` alone with `basis: "per-day"` was wrong and it read as wrong:
+   * the accommodation line said "$114" and "per day" beside each other, when
+   * $114 is three nights at $38. A reader checking our sums cannot check a
+   * number whose derivation is only described in a sentence.
+   *
+   * So a per-day line carries its unit rate and its count and renders
+   * "$38 × 3 nights = $114", and a per-group line carries what it was divided
+   * by and renders "$35 × 12 days ÷ 4 = $105". The guard reproduces the
+   * arithmetic and fails if it does not land on `amountUSD`.
+   */
+  unitAmountUSD?: number;
+  unitCount?: number;
+  /** Singular. "night", "day", "person" — pluralised at render time. */
+  unitLabel?: string;
+  /** For per-group lines: how many people the group charge is split across. */
+  dividedBy?: number;
+};
+
+/**
+ * Something you can add, that is not in the price.
+ *
+ * Kept as data rather than as a sentence under the total because that is what
+ * it is: a priced option a reader may want to compare, add up, or forward. The
+ * single supplement lived in prose and was therefore invisible to the PDF, to
+ * the feed, and to anyone scanning the tables for numbers.
+ */
+export type OptionalExtra = {
+  id: string;
+  label: string;
+  amountUSD: number;
+  note?: string;
 };
 
 export type Contingency = {
@@ -84,6 +119,22 @@ export type Contingency = {
 export type CostSheet = {
   lines: CostLine[];
   contingencies: Contingency[];
+  /** Priced options, not in the total. Includes the single supplement. */
+  optionalExtras: OptionalExtra[];
+  /**
+   * What happens to a shared cost when the group is smaller than the cap.
+   *
+   * Guide time and group equipment are divided at the group cap. If five
+   * people book a trip costed at fourteen, the true per-person share is nearly
+   * three times what the ledger shows. Somebody carries that difference, and a
+   * cost sheet that does not say who is hiding the one number a small-group
+   * traveller most needs.
+   *
+   * `we-absorb` — the published price stands whatever the group size.
+   * `price-varies` — the price would be recalculated, and the page says so
+   *   plainly instead of implying otherwise.
+   */
+  sharedCostPolicy: "we-absorb" | "price-varies";
   tipping: {
     guidance: string;
     included: false;
@@ -117,6 +168,26 @@ const STAFF_DAY_USD = {
 
 /** Insurance and kit for staff, per trekker. Legally required, routinely skipped. */
 const STAFF_COVER_USD = 9;
+
+/**
+ * Kathmandu office and coordination, per trekker per day of trip.
+ *
+ * Permits filed in person at three different offices, domestic flights held and
+ * re-held as the weather moves, teahouses booked ahead on the ridges where beds
+ * run out, and somebody reachable at two in the morning when a group is stuck
+ * at Ramechhap. It is real work by paid people and it is not the same thing as
+ * profit, which is why it stopped being bundled with it.
+ */
+const OFFICE_DAY_USD = 7;
+
+/**
+ * Held to refund you if this departure does not reach its minimum.
+ *
+ * A share of the price, set aside against THIS departure rather than pooled, so
+ * the refund does not depend on next month's bookings. Distinct from the
+ * contingency reserve, which pays for delays on a trip that does run.
+ */
+const GUARANTEE_RESERVE_SHARE = 0.025;
 
 type TrekCosts = {
   /** Statutory fees, each named with who receives it. */
@@ -154,6 +225,16 @@ type TrekCosts = {
    * around $70 a head and two or three of them is an ordinary season.
    */
   reserveUSD: number;
+  /**
+   * The cost of being a company that legally exists, per traveller.
+   *
+   * Trekking agency licence, TAAN and NMA membership, company liability
+   * insurance, annual registration and audit. Small, unglamorous, and the first
+   * thing an unregistered operator saves by not paying.
+   */
+  licencesUSD: number;
+  /** Trek-specific options a traveller can add. Merged with the universal ones. */
+  extras?: OptionalExtra[];
   /** Days of food covered, and the daily rate. */
   mealDays: number;
   perDayUSD: number;
@@ -299,10 +380,15 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     ],
     transport: [
       {
-        label: "Kathmandu–Lukla return flight",
+        label: "Lukla return flight",
         amountUSD: 440,
-        note: "$220 each way at peak-season fares. The single largest line, and the one most often left out of an 'all-inclusive' quote.",
+        note: "$220 each way at peak-season fares. From mid-March to May and from October to November this flight departs from RAMECHHAP, not Kathmandu — see the ground transfer below. It is the single largest line here and the one most often left out of an 'all-inclusive' quote.",
         payableTo: "the airline",
+      },
+      {
+        label: "Ramechhap ground transfer, both directions",
+        amountUSD: 55,
+        note: "Peak season only, and this departure falls inside it. Ramechhap is four to five hours from Kathmandu by road and the flights leave at first light, so the drive starts at around 1am. Private vehicle, both directions, included here rather than sprung on you at the hotel desk the night before.",
       },
       {
         label: "Airport transfers, Kathmandu",
@@ -316,7 +402,8 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     cityNights: 1,
     perCityNightUSD: 45,
     cityLabel: "Kathmandu hotel, twin share",
-    reserveUSD: 190,
+    reserveUSD: 150,
+    licencesUSD: 34,
     mealDays: 12,
     perDayUSD: 34,
     mealsNote:
@@ -326,6 +413,14 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     equipmentUSD: 48,
     equipmentNote:
       "Duffel, four-season sleeping bag, group first aid, pulse oximeter, and a portable altitude chamber carried above 4,000 m.",
+    extras: [
+      {
+        id: "heli-out",
+        label: "Helicopter seat out of Lukla, shared",
+        amountUSD: 650,
+        note: "Arranged at cost if you want to guarantee getting out on a fixed day rather than wait for the weather. We take no commission on it. Price moves with demand; this is the middle of the range.",
+      },
+    ],
     contingencies: [
       ...LUKLA_CONTINGENCIES,
       ALTITUDE_CONTINGENCY(5364),
@@ -379,6 +474,7 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     perCityNightUSD: 40,
     cityLabel: "Pokhara hotel, twin share",
     reserveUSD: 70,
+    licencesUSD: 28,
     mealDays: 9,
     perDayUSD: 24,
     mealsNote: "Three meals a day on the trail, plus breakfast in Pokhara.",
@@ -449,6 +545,7 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     perCityNightUSD: 38,
     cityLabel: "Pokhara and Besisahar hotels, twin share",
     reserveUSD: 110,
+    licencesUSD: 32,
     mealDays: 14,
     perDayUSD: 26,
     mealsNote:
@@ -517,6 +614,7 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     perCityNightUSD: 42,
     cityLabel: "Kathmandu hotel, twin share",
     reserveUSD: 60,
+    licencesUSD: 24,
     mealDays: 7,
     perDayUSD: 23,
     mealsNote: "Three meals a day on the trail.",
@@ -580,6 +678,7 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     perCityNightUSD: 42,
     cityLabel: "Pokhara hotel, twin share",
     reserveUSD: 150,
+    licencesUSD: 30,
     mealDays: 13,
     perDayUSD: 27,
     mealsNote:
@@ -647,6 +746,7 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     perCityNightUSD: 38,
     cityLabel: "Pokhara hotel, twin share",
     reserveUSD: 35,
+    licencesUSD: 20,
     mealDays: 5,
     perDayUSD: 22,
     mealsNote: "Three meals a day on the trail.",
@@ -704,6 +804,7 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     perCityNightUSD: 38,
     cityLabel: "Pokhara hotel, twin share",
     reserveUSD: 50,
+    licencesUSD: 24,
     mealDays: 7,
     perDayUSD: 24,
     mealsNote:
@@ -767,6 +868,7 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     perNightUSD: 42,
     accommodationLabel: "Lodge accommodation, twin share",
     reserveUSD: 35,
+    licencesUSD: 20,
     mealDays: 5,
     perDayUSD: 34,
     mealsNote: "Full board at the lodge.",
@@ -832,6 +934,7 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     perNightUSD: 46,
     accommodationLabel: "Lodge accommodation, twin share",
     reserveUSD: 90,
+    licencesUSD: 22,
     mealDays: 6,
     perDayUSD: 34,
     mealsNote: "Full board at the lodge.",
@@ -888,6 +991,7 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     perNightUSD: 38,
     accommodationLabel: "Hotel and lodge accommodation, twin share",
     reserveUSD: 25,
+    licencesUSD: 18,
     mealDays: 4,
     perDayUSD: 22,
     mealsNote:
@@ -972,9 +1076,6 @@ const UNIVERSAL_EXCLUDES: {
 
 const round = (n: number) => Math.round(n);
 
-/** "1 night", "10 nights". Small, and the kind of thing a reader notices. */
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-
 /**
  * Assemble one departure's cost sheet.
  *
@@ -992,7 +1093,12 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 export function buildCostSheet(
   trekId: string,
   trek: TrekProfile,
-  input: { priceUSD: number; days: number },
+  input: {
+    priceUSD: number;
+    days: number;
+    groupSizeMax: number;
+    singleSupplementUSD: number;
+  },
 ): CostSheet {
   const costs = TREK_COSTS[trekId];
   if (!costs) throw new Error(`no cost profile for trek "${trekId}"`);
@@ -1043,8 +1149,11 @@ export function buildCostSheet(
     category: "accommodation",
     amountUSD: round(costs.nights * costs.perNightUSD),
     basis: "per-day",
+    unitAmountUSD: costs.perNightUSD,
+    unitCount: costs.nights,
+    unitLabel: "night",
     included: true,
-    note: `${plural(costs.nights, "night")} at $${costs.perNightUSD} a night.`,
+    note: "Twin share. A single room is an optional extra, not a surcharge.",
     payableTo: "paid by us directly to the teahouses and lodges",
   });
 
@@ -1055,8 +1164,10 @@ export function buildCostSheet(
       category: "accommodation",
       amountUSD: round(costs.cityNights * costs.perCityNightUSD),
       basis: "per-day",
+      unitAmountUSD: costs.perCityNightUSD,
+      unitCount: costs.cityNights,
+      unitLabel: "night",
       included: true,
-      note: `${plural(costs.cityNights, "night")} at $${costs.perCityNightUSD} a night.`,
     });
   }
 
@@ -1068,8 +1179,11 @@ export function buildCostSheet(
     category: "meals",
     amountUSD: round(costs.mealDays * costs.perDayUSD),
     basis: "per-day",
+    unitAmountUSD: costs.perDayUSD,
+    unitCount: costs.mealDays,
+    unitLabel: "day",
     included: true,
-    note: `${plural(costs.mealDays, "day")} at $${costs.perDayUSD} a day. ${costs.mealsNote}`,
+    note: costs.mealsNote,
     payableTo: "paid by us directly to the teahouses and lodges",
   });
 
@@ -1081,8 +1195,12 @@ export function buildCostSheet(
     category: "staff",
     amountUSD: round((STAFF_DAY_USD.guide * input.days) / perGuide),
     basis: "per-group",
+    unitAmountUSD: STAFF_DAY_USD.guide,
+    unitCount: input.days,
+    unitLabel: "day",
+    dividedBy: perGuide,
     included: true,
-    note: `$${STAFF_DAY_USD.guide} a day for ${input.days} days, one guide to ${perGuide} trekkers.`,
+    note: `Paid at $${STAFF_DAY_USD.guide} a day, above the government minimum and above the common market rate.`,
     payableTo: "the guide",
   });
 
@@ -1095,8 +1213,12 @@ export function buildCostSheet(
         (STAFF_DAY_USD.assistantGuide * costs.assistantGuideDays) / perGuide,
       ),
       basis: "per-group",
+      unitAmountUSD: STAFF_DAY_USD.assistantGuide,
+      unitCount: costs.assistantGuideDays,
+      unitLabel: "day",
+      dividedBy: perGuide,
       included: true,
-      note: `$${STAFF_DAY_USD.assistantGuide} a day for the ${costs.assistantGuideDays} days spent high, so one person can descend without the group turning back.`,
+      note: "Carried for the days spent high, so one person can descend without the group turning back.",
       payableTo: "the assistant guide",
     });
   }
@@ -1110,8 +1232,12 @@ export function buildCostSheet(
         (STAFF_DAY_USD.porter * input.days) / costs.trekkersPerPorter,
       ),
       basis: "per-group",
+      unitAmountUSD: STAFF_DAY_USD.porter,
+      unitCount: input.days,
+      unitLabel: "day",
+      dividedBy: costs.trekkersPerPorter,
       included: true,
-      note: `$${STAFF_DAY_USD.porter} a day for ${input.days} days, one porter to ${costs.trekkersPerPorter} trekkers, load capped at 20kg.`,
+      note: `Paid at $${STAFF_DAY_USD.porter} a day, one porter to ${costs.trekkersPerPorter} trekkers, load capped at 20kg.`,
       payableTo: "the porters",
     });
   }
@@ -1134,12 +1260,33 @@ export function buildCostSheet(
     category: "equipment",
     amountUSD: costs.equipmentUSD,
     basis: "per-group",
+    // Stated as what the kit costs the group and what that is each, rather than
+    // as a bare per-head figure: the sleeping bags and the altitude chamber are
+    // bought once for everybody.
+    unitAmountUSD: costs.equipmentUSD * input.groupSizeMax,
+    unitCount: 1,
+    unitLabel: "set",
+    dividedBy: input.groupSizeMax,
     included: true,
     note: costs.equipmentNote,
   });
 
   /* -------------------------------------------------------------- admin */
 
+  /*
+   * Four lines, not one.
+   *
+   * This was a single "Operating margin, office, licences and guarantee" line,
+   * and on a short trek it came to a third of the price sitting beside a staff
+   * total of five per cent. That reads as five per cent to the people who walk
+   * with you and thirty-three to the office — which is the accusation this
+   * company exists to answer, printed in our own typeface.
+   *
+   * The number was not wrong. The presentation was: it bundled three genuine
+   * costs with the profit and then called the whole thing margin, which is both
+   * inaccurate and the least flattering possible reading of it. Split apart,
+   * each line has to justify itself, and the last one is called what it is.
+   */
   add({
     id: "reserve",
     label: "Contingency reserve",
@@ -1147,7 +1294,40 @@ export function buildCostSheet(
     amountUSD: costs.reserveUSD,
     basis: "per-person",
     included: true,
-    note: "What pays for the delays, reroutes and extra nights listed under 'When things go wrong'. Held against this departure rather than a general fund.",
+    note: "Pays for the delays, reroutes and extra nights under 'When things go wrong' on a trip that does run. Held against this departure rather than pooled.",
+  });
+
+  add({
+    id: "guarantee-reserve",
+    label: "Guarantee reserve",
+    category: "admin",
+    amountUSD: round(input.priceUSD * GUARANTEE_RESERVE_SHARE),
+    basis: "per-person",
+    included: true,
+    note: "Held to refund you in full if this departure does not reach its minimum by the decision date. Held against this departure, not pooled — the refund does not depend on next month's bookings.",
+  });
+
+  add({
+    id: "licences",
+    label: "Licences, company insurance and registrations",
+    category: "admin",
+    amountUSD: costs.licencesUSD,
+    basis: "per-person",
+    included: true,
+    note: "Trekking agency licence, TAAN and NMA membership, company liability insurance, annual registration and audit. The first thing an unregistered operator saves by not paying.",
+  });
+
+  add({
+    id: "office",
+    label: "Kathmandu office and coordination",
+    category: "admin",
+    amountUSD: round(OFFICE_DAY_USD * input.days),
+    basis: "per-day",
+    unitAmountUSD: OFFICE_DAY_USD,
+    unitCount: input.days,
+    unitLabel: "day",
+    included: true,
+    note: "Permits filed in person, flights held and re-held as the weather moves, beds booked ahead where they run out, and somebody reachable at two in the morning when something goes wrong.",
   });
 
   /*
@@ -1163,13 +1343,13 @@ export function buildCostSheet(
   const margin = input.priceUSD - spent;
 
   add({
-    id: "margin",
-    label: "Operating margin, office, licences and guarantee",
+    id: "fee",
+    label: "Our fee",
     category: "admin",
     amountUSD: margin,
     basis: "per-person",
     included: true,
-    note: `${Math.round((margin / input.priceUSD) * 100)}% of the price. Pays the Kathmandu office, the operating licence and company insurance, and funds the refund if this departure does not reach its minimum.`,
+    note: `${Math.round((margin / input.priceUSD) * 100)}% of the price. What the company keeps once everything above is paid. Not called margin, because margin is a word that means several things and this means one.`,
   });
 
   /* ----------------------------------------------------------- excluded */
@@ -1198,9 +1378,50 @@ export function buildCostSheet(
     });
   }
 
+  /*
+   * The single supplement is a priced option, not a surcharge, so it belongs in
+   * a table with the other options rather than in a sentence under the total.
+   * `check:departures` fails if the card advertises one and this list does not
+   * carry it at the same figure.
+   */
+  const optionalExtras: OptionalExtra[] = [
+    ...(input.singleSupplementUSD > 0
+      ? [
+          {
+            id: "single-room",
+            label: "Single room throughout",
+            amountUSD: input.singleSupplementUSD,
+            note: "A room to yourself every night the accommodation allows one. On the high teahouse sections there are nights where nobody gets one, and you are not charged for those.",
+          },
+        ]
+      : []),
+    {
+      id: "extra-kathmandu-night",
+      label: "Extra night in Kathmandu, per night",
+      amountUSD: 48,
+      note: "Twin share, at the hotel we use. Worth one either side if your international flight is tight.",
+    },
+    {
+      id: "gear-rental",
+      label: "Gear rental package",
+      amountUSD: 65,
+      note: "Down jacket, four-season sleeping bag and duffel for the trip. Cheaper than buying if you will not use them again.",
+    },
+    ...(costs.extras ?? []),
+  ];
+
   return {
     lines,
     contingencies: costs.contingencies,
+    optionalExtras,
+    /*
+     * We absorb it. If five people book a departure costed at fourteen, the
+     * guide's day rate is split five ways instead and the difference is ours —
+     * the published price is what you pay. This is stated rather than implied
+     * because the alternative practice, quietly recalculating on a small group,
+     * is common enough that a traveller is right to ask.
+     */
+    sharedCostPolicy: "we-absorb",
     tipping: {
       guidance:
         "Tipping is customary in Nepal and it is not included in the price above. We do not collect it, we do not add it to an invoice, and no member of staff will ask you for it. The range below is what groups commonly give across a whole trip, pooled and divided at the end.",

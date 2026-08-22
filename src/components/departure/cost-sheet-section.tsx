@@ -36,6 +36,32 @@ const INSURANCE_LABEL: Record<Contingency["coveredByInsurance"], string> = {
   depends: "Depends on your policy",
 };
 
+/**
+ * The intro sentence, built from the lines that are actually there.
+ *
+ * It used to say the sheet ran "from the national park permit to the porters'
+ * day rate" on every departure, including the ones with no porters. Copy that
+ * names a line has to read the lines, or it is the same unchecked claim the
+ * section exists to argue against — just about itself.
+ */
+function bookendLabels(lines: { category: string; label: string }[]): {
+  first: string;
+  last: string;
+} {
+  const first = lines[0];
+  // The last line before the operating block: "our fee" is a true bookend but a
+  // deflating one to point at, and the reader has not reached it yet.
+  const beforeAdmin = lines.filter((l) => l.category !== "admin");
+  const last = beforeAdmin[beforeAdmin.length - 1] ?? lines[lines.length - 1];
+
+  // Verbatim, not lowercased. Forcing the first character down turned
+  // "Sagarmatha National Park entry" into "sagarmatha National Park entry",
+  // which is exactly the kind of small wrongness a reader notices on a page
+  // asking to be trusted with arithmetic. The sentence is shaped around the
+  // labels instead of the labels being reshaped to fit the sentence.
+  return { first: first.label, last: last.label };
+}
+
 function costRange(value: Contingency["estimatedCostUSD"]): string | null {
   if (value === undefined) return null;
   if (Array.isArray(value)) return `${money(value[0])}–${money(value[1])}`;
@@ -126,6 +152,9 @@ export function CostSheetSection({ departure }: { departure: Departure }) {
 
   const ins = costSheet.insuranceRequirement;
   const [tipLow, tipHigh] = costSheet.tipping.typicalRangeUSD;
+  const bookends = bookendLabels(included);
+  const divided = included.filter((l) => l.dividedBy !== undefined);
+  const extras = costSheet.optionalExtras;
 
   return (
     <section
@@ -145,9 +174,9 @@ export function CostSheetSection({ departure }: { departure: Departure }) {
             Where every dollar goes.
           </h2>
           <p className="mt-5 max-w-[62ch] text-base text-muted-foreground">
-            The {money(departure.priceUSD)} on this page is itemised below, and
-            the lines add up to it exactly — {included.length} of them, from the
-            national park permit to the porters&rsquo; day rate.
+            The {money(departure.priceUSD)} on this page is itemised below and
+            the lines add up to it exactly. There are {included.length},
+            starting at {bookends.first} and ending at {bookends.last}.
           </p>
         </Reveal>
 
@@ -159,19 +188,27 @@ export function CostSheetSection({ departure }: { departure: Departure }) {
             caption={`Itemised cost for ${departure.trekName}, departing ${departure.departsOn}. Included lines only, totalling ${money(departure.priceUSD)} per person.`}
           />
 
-          <p className="mt-6 max-w-[62ch] text-sm">
+          {divided.length > 0 && (
+            <p className="mt-6 max-w-[68ch] text-sm text-muted-foreground">
+              {costSheet.sharedCostPolicy === "we-absorb" ? (
+                <>
+                  Shared costs above are divided at the group cap. If fewer
+                  people book, we absorb the difference — your price does not
+                  change.
+                </>
+              ) : (
+                <>
+                  Shared costs above are divided at the group cap. If fewer
+                  people book, the per-person share rises and your price is
+                  recalculated before you are asked to pay.
+                </>
+              )}
+            </p>
+          )}
+
+          <p className="mt-4 max-w-[62ch] text-sm">
             {onArrival.length === 0 ? (
-              <>
-                This is the full price. There is nothing to pay on arrival.
-                {departure.singleSupplementUSD > 0 && (
-                  <>
-                    {" "}
-                    A single room, if you want one, is{" "}
-                    {money(departure.singleSupplementUSD)} on top and is the
-                    only other charge we make.
-                  </>
-                )}
-              </>
+              <>This is the full price. There is nothing to pay on arrival.</>
             ) : (
               <>
                 Payable on arrival:{" "}
@@ -182,6 +219,48 @@ export function CostSheetSection({ departure }: { departure: Departure }) {
             )}
           </p>
         </div>
+
+        {/* 1b — OPTIONAL EXTRAS */}
+        {extras.length > 0 && (
+          <div className="mt-16 lg:mt-20">
+            <Reveal>
+              <h3 className="font-display text-2xl tracking-tight lg:text-3xl">
+                Optional, and not in the price.
+              </h3>
+              <p className="mt-4 max-w-[62ch] text-base text-muted-foreground">
+                Things you can add. None of them is required, none is assumed,
+                and none is in the total above.
+              </p>
+            </Reveal>
+
+            <table className="mt-8 w-full border-collapse text-left">
+              <caption className="sr-only">
+                Optional extras for {departure.trekName}, not included in the{" "}
+                {money(departure.priceUSD)} total.
+              </caption>
+              <tbody className="border-t-2 border-foreground/15">
+                {extras.map((extra) => (
+                  <tr key={extra.id} className="border-t border-border/60">
+                    <th
+                      scope="row"
+                      className="py-3 pr-4 text-left align-top font-normal"
+                    >
+                      <span className="block text-sm">{extra.label}</span>
+                      {extra.note && (
+                        <span className="mt-1 block max-w-[62ch] text-xs text-muted-foreground">
+                          {extra.note}
+                        </span>
+                      )}
+                    </th>
+                    <td className="py-3 text-right align-top tabular text-sm whitespace-nowrap">
+                      {money(extra.amountUSD)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* 2 — NOT INCLUDED */}
         <div className="mt-16 lg:mt-20">

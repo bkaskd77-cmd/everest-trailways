@@ -32,8 +32,26 @@ const CATEGORY_LABEL: Record<string, string> = {
   meals: "Meals",
   staff: "Staff",
   equipment: "Equipment",
-  admin: "Operating",
+  admin: "Running the company",
 };
+
+/** "$38 x 3 nights", "$35 x 12 days / 4". Mirrors the page's basis column. */
+function derivation(line: {
+  unitAmountUSD?: number;
+  unitCount?: number;
+  unitLabel?: string;
+  dividedBy?: number;
+}): string {
+  const { unitAmountUSD, unitCount, unitLabel, dividedBy } = line;
+  if (unitAmountUSD === undefined || unitCount === undefined) return "";
+
+  const unit =
+    unitCount === 1 && unitLabel === "set"
+      ? money(unitAmountUSD)
+      : `${money(unitAmountUSD)} x ${unitCount} ${unitLabel}${unitCount === 1 ? "" : "s"}`;
+
+  return dividedBy ? `${unit} / ${dividedBy}` : unit;
+}
 
 const ORDER = [
   "permits",
@@ -139,11 +157,12 @@ export function costSheetPdf(
       // The label wraps within the column that stops short of the amount.
       const labelWidth = amountX - M.left - 70;
       const labelLines = wrap(line.label, 9.5, "regular", labelWidth);
+      const sum = derivation(line);
       const noteLines = line.note
         ? wrap(line.note, 7.5, "regular", labelWidth)
         : [];
 
-      space(labelLines.length * 11 + noteLines.length * 9 + 6);
+      space(labelLines.length * 11 + noteLines.length * 9 + (sum ? 9 : 0) + 6);
 
       for (const [i, text] of labelLines.entries()) {
         doc.text(text, M.left, y, { size: 9.5 });
@@ -154,6 +173,10 @@ export function costSheetPdf(
           });
         }
         y -= 11;
+      }
+      if (sum) {
+        doc.text(sum, M.left, y, { size: 7.5, grey: 0.3 });
+        y -= 9;
       }
       for (const text of noteLines) {
         doc.text(text, M.left, y, { size: 7.5, grey: 0.45 });
@@ -174,20 +197,59 @@ export function costSheetPdf(
   doc.textRight(money(total), amountX, y, { size: 15, face: "bold" });
   y -= 16;
 
-  if (departure.singleSupplementUSD > 0) {
-    doc.text(
-      `Single supplement, optional: ${money(departure.singleSupplementUSD)}`,
-      M.left,
-      y,
-      { size: 8, grey: 0.4 },
-    );
-    y -= 10;
-  }
   doc.text("There is nothing to pay on arrival.", M.left, y, {
     size: 8,
     grey: 0.4,
   });
-  y -= 22;
+  y -= 10;
+
+  if (departure.costSheet.lines.some((l) => l.dividedBy !== undefined)) {
+    const policy =
+      departure.costSheet.sharedCostPolicy === "we-absorb"
+        ? "Shared costs above are divided at the group cap. If fewer people book, we absorb the difference - your price does not change."
+        : "Shared costs above are divided at the group cap. If fewer people book, the per-person share rises and your price is recalculated.";
+    for (const text of wrap(policy, 8, "regular", RIGHT - M.left)) {
+      doc.text(text, M.left, y, { size: 8, grey: 0.4 });
+      y -= 9;
+    }
+  }
+  y -= 14;
+
+  /* ---------------------------------------------------- optional extras */
+
+  if (departure.costSheet.optionalExtras.length) {
+    space(50);
+    doc.text("OPTIONAL, NOT IN THE PRICE", M.left, y, {
+      size: 8,
+      face: "bold",
+      grey: 0.35,
+    });
+    y -= 5;
+    doc.rule(M.left, RIGHT, y, 0.5, 0.8);
+    y -= 12;
+
+    for (const extra of departure.costSheet.optionalExtras) {
+      const labelLines = wrap(
+        extra.label,
+        9.5,
+        "regular",
+        amountX - M.left - 70,
+      );
+      space(labelLines.length * 11 + 3);
+      for (const [i, text] of labelLines.entries()) {
+        doc.text(text, M.left, y, { size: 9.5 });
+        if (i === 0) {
+          doc.textRight(money(extra.amountUSD), amountX, y, {
+            size: 9.5,
+            grey: 0.35,
+          });
+        }
+        y -= 11;
+      }
+      y -= 1;
+    }
+    y -= 14;
+  }
 
   /* ------------------------------------------------------- not included */
 

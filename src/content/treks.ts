@@ -116,7 +116,7 @@ export const TREKS: Record<string, TrekProfile> = {
         accommodation: "teahouse",
         meals: BLD,
         isTravelDay: true,
-        note: "The Lukla flight is weather-dependent and can move by a day. The cost of that delay sits with us.",
+        note: "From mid-March to May and from October to November this flight leaves from Ramechhap, not Kathmandu. That means a four-to-five hour drive starting around 1am, which we provide and which is priced in the cost sheet. The flight is weather-dependent and can move by a day; the cost of that delay sits with us.",
       },
       {
         day: 3,

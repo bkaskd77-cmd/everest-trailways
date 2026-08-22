@@ -278,7 +278,7 @@ const SEEDS: Seed[] = [
     seatsBooked: 4,
     minimumToRun: 4,
     guaranteedAt: "2026-08-01",
-    priceUSD: 1180,
+    priceUSD: 1320,
     singleSupplementUSD: 210,
     priceIncludes: [
       "Bardia National Park permits and ranger fees",
@@ -325,7 +325,7 @@ const SEEDS: Seed[] = [
     seatsTotal: 8,
     seatsBooked: 2,
     minimumToRun: 4,
-    priceUSD: 1180,
+    priceUSD: 1320,
     singleSupplementUSD: 210,
     priceIncludes: [
       "Bardia National Park permits and ranger fees",
@@ -414,7 +414,7 @@ const SEEDS: Seed[] = [
     seatsBooked: 7,
     minimumToRun: 4,
     guaranteedAt: "2026-08-12",
-    priceUSD: 720,
+    priceUSD: 830,
     singleSupplementUSD: 145,
     priceIncludes: [
       "National park permits and naturalist guide fees",
@@ -438,7 +438,7 @@ const SEEDS: Seed[] = [
     seatsBooked: 6,
     minimumToRun: 4,
     guaranteedAt: "2026-08-05",
-    priceUSD: 1180,
+    priceUSD: 1320,
     singleSupplementUSD: 210,
     priceIncludes: [
       "Bardia National Park permits and ranger fees",
@@ -462,7 +462,7 @@ const SEEDS: Seed[] = [
     seatsBooked: 5,
     minimumToRun: 4,
     guaranteedAt: "2026-09-30",
-    priceUSD: 720,
+    priceUSD: 830,
     singleSupplementUSD: 145,
     priceIncludes: [
       "National park permits and naturalist guide fees",
@@ -575,7 +575,7 @@ const SEEDS: Seed[] = [
     seatsBooked: 6,
     minimumToRun: 4,
     guaranteedAt: "2026-08-01",
-    priceUSD: 2450,
+    priceUSD: 2750,
     singleSupplementUSD: 320,
     priceIncludes: [
       "Restricted-area permit, itemised in full",
@@ -679,6 +679,8 @@ function compose(seed: Seed): Departure {
     costSheet: buildCostSheet(seed.trekId, trek, {
       priceUSD: seed.priceUSD,
       days,
+      groupSizeMax: trek.groupSizeMax,
+      singleSupplementUSD: seed.singleSupplementUSD,
     }),
   };
 }

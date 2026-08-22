@@ -31,7 +31,9 @@ const CATEGORY_LABEL: Record<CostLine["category"], string> = {
   meals: "Meals",
   staff: "Staff",
   equipment: "Equipment",
-  admin: "Operating",
+  // Not "Operating". That read as a grab-bag, and a grab-bag next to a small
+  // staff number is what an operator with something to hide would produce.
+  admin: "Running the company",
 };
 
 /** The order a reader expects: statutory first, ours last. */
@@ -52,6 +54,29 @@ const BASIS_LABEL: Record<CostLine["basis"], string> = {
 };
 
 const money = (n: number) => `$${n.toLocaleString("en-GB")}`;
+
+/**
+ * The arithmetic behind a line, in the basis column.
+ *
+ * "$38 × 3 nights" and "$35 × 12 days ÷ 4" rather than a bare "per day" beside
+ * a total that is plainly not a daily figure. The basis and the amount agreed
+ * on paper before and did not agree on screen, which is the sort of small
+ * incoherence that makes a reader stop trusting the arithmetic they cannot see.
+ */
+function derivation(line: CostLine): string {
+  const { unitAmountUSD, unitCount, unitLabel, dividedBy } = line;
+
+  if (unitAmountUSD === undefined || unitCount === undefined) {
+    return BASIS_LABEL[line.basis];
+  }
+
+  const unit =
+    unitCount === 1 && unitLabel === "set"
+      ? money(unitAmountUSD)
+      : `${money(unitAmountUSD)} × ${unitCount} ${unitLabel}${unitCount === 1 ? "" : "s"}`;
+
+  return dividedBy ? `${unit} ÷ ${dividedBy}` : unit;
+}
 
 function group(lines: CostLine[]) {
   return CATEGORY_ORDER.map((category) => ({
@@ -104,8 +129,8 @@ function Row({
           </span>
         )}
       </th>
-      <td className="hidden py-3 pr-4 align-top text-xs whitespace-nowrap text-muted-foreground sm:table-cell">
-        {BASIS_LABEL[line.basis]}
+      <td className="hidden py-3 pr-4 align-top tabular text-xs whitespace-nowrap text-muted-foreground sm:table-cell">
+        {derivation(line)}
       </td>
       <td className="py-3 text-right align-top tabular text-sm whitespace-nowrap">
         {total === 0 ? (
@@ -211,7 +236,7 @@ export function CostLedger({
       <caption className="sr-only">{caption}</caption>
       <colgroup>
         <col />
-        <col className="w-40" />
+        <col className="w-48" />
         <col className="w-28" />
       </colgroup>
 
