@@ -71,6 +71,39 @@ export const treksInRegion = (region: string) =>
 export const regionBySlug = (slug: string) =>
   REGIONS.find((r) => regionSlug(r) === slug);
 
+/**
+ * The photograph at the top of a trek page.
+ *
+ * No trek carries its own yet, and ten pages opening on an empty dark
+ * rectangle is what "unfinished" looks like from the outside. The departures
+ * on the route already hold verified photographs of exactly this walk, so the
+ * page borrows one rather than shipping a blank header or — the alternative
+ * that caused real damage earlier in this project — a plausible stock image
+ * captioned as somewhere it is not.
+ *
+ * Landscape first, then trail, then whatever the route actually has. The
+ * Terai safaris and Upper Mustang hold no scenery photograph at all, and for
+ * them a verified picture of the room or the road behind the header gradient
+ * is a better page than an empty rectangle — it is still a true photograph of
+ * that trip, with its own caption as alt text.
+ *
+ * When a trek gets its own photograph, `trek.heroImage.src` wins and this
+ * stops being consulted.
+ */
+export function trekHeroImage(trek: Trek) {
+  if (trek.heroImage.src) return trek.heroImage;
+
+  const pool = trekDepartures(trek.id).flatMap((d) => d.gallery);
+  const pick =
+    pool.find((g) => g.src && g.category === "landscape") ??
+    pool.find((g) => g.src && g.category === "trail") ??
+    pool.find((g) => g.src);
+
+  return pick
+    ? { src: pick.src, alt: pick.alt || pick.caption, focal: pick.focal }
+    : trek.heroImage;
+}
+
 /* --------------------------------------------------------------------- FAQ */
 
 const MONTH_LONG = [

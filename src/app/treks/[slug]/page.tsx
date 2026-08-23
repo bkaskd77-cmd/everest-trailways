@@ -26,6 +26,7 @@ import {
   trekDepartures,
   trekFaqJsonLd,
   trekFaqs,
+  trekHeroImage,
   trekJsonLd,
 } from "@/lib/treks";
 import { textShadowCss } from "@/lib/hero-scrim";
@@ -68,7 +69,9 @@ export async function generateMetadata({
       title: `${trek.name} — ${siteConfig.name}`,
       description: trek.summary,
       url: `${siteConfig.url}/treks/${trek.slug}`,
-      ...(trek.heroImage.src ? { images: [trek.heroImage.src] } : {}),
+      ...(trekHeroImage(trek).src
+        ? { images: [trekHeroImage(trek).src as string] }
+        : {}),
     },
   };
 }
@@ -92,6 +95,7 @@ export default async function TrekPage({
   const open = bookableFor(trek.id);
   const cancelled = cancelledFor(trek.id);
   const range = priceRange(trek.id);
+  const hero = trekHeroImage(trek);
   const faqs = trekFaqs(trek);
   const [minDays, maxDays] = trek.typicalDays;
   const dayLabel = minDays === maxDays ? `${minDays}` : `${minDays}–${maxDays}`;
@@ -108,12 +112,12 @@ export default async function TrekPage({
 
       {/* 1 — HEADER */}
       <header className="relative isolate overflow-hidden bg-summit text-glacier">
-        {trek.heroImage.src ? (
+        {hero.src ? (
           <SiteImage
             slot="departureHero"
-            src={trek.heroImage.src}
-            alt={trek.heroImage.alt}
-            focal={trek.heroImage.focal}
+            src={hero.src}
+            alt={hero.alt}
+            focal={hero.focal}
             priority
             className="absolute inset-0 -z-10 size-full object-cover opacity-70"
           />

@@ -232,15 +232,44 @@ export const GRID_CATEGORIES = [
   "people",
 ] as const;
 
-export const headerImages = (gallery: GalleryImage[]) =>
-  gallery.filter((g) =>
+/**
+ * The header half, with one rule that outranks the split.
+ *
+ * A hero of nothing but grey panels is a broken-looking page, and the split
+ * shipped three of them: Bardia, Chitwan and Upper Mustang hold their only
+ * verified photograph in a grid category, so restricting the slider to
+ * landscape and trail left their headers with no photograph at all. Before the
+ * split the slider drew on the whole pool and always had something real.
+ *
+ * So when the preferred half has no photograph in it, one is promoted from the
+ * other half. It leaves the grid when it does, which keeps the two sides a
+ * partition and keeps the no-duplication rule intact — the promoted image
+ * still appears exactly once on the page.
+ *
+ * This is a fallback for missing photography, not a category. When the real
+ * photographs arrive the preferred half will have one and the promotion stops
+ * happening on its own.
+ */
+export const headerImages = (gallery: GalleryImage[]): GalleryImage[] => {
+  const preferred = gallery.filter((g) =>
     (HEADER_CATEGORIES as readonly string[]).includes(g.category),
   );
+  if (preferred.some((g) => g.src)) return preferred;
 
-export const gridImages = (gallery: GalleryImage[]) =>
-  gallery.filter((g) =>
-    (GRID_CATEGORIES as readonly string[]).includes(g.category),
+  const promoted = gallery.find(
+    (g) => g.src && !(HEADER_CATEGORIES as readonly string[]).includes(g.category),
   );
+  return promoted ? [promoted, ...preferred] : preferred;
+};
+
+export const gridImages = (gallery: GalleryImage[]): GalleryImage[] => {
+  const header = headerImages(gallery);
+  return gallery.filter(
+    (g) =>
+      !header.includes(g) &&
+      (GRID_CATEGORIES as readonly string[]).includes(g.category),
+  );
+};
 
 export const GALLERIES: Record<string, GalleryImage[]> = {
   "everest-base-camp": [

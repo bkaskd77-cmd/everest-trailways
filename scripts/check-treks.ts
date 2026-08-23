@@ -327,6 +327,25 @@ for (const trek of TREK_PAGES) {
       );
     }
   }
+  /*
+   * The page has to open on a photograph.
+   *
+   * Ten trek pages shipped with an empty dark header because no trek carries
+   * its own image yet and nothing checked. `trekHeroImage` borrows a verified
+   * landscape or trail photograph from the route's own departures; this fails
+   * if that stops resolving — and it fails rather than warns, because an empty
+   * hero is the single most visible way for this site to look broken.
+   */
+  const heroPool = dates.flatMap((d) => d.gallery);
+  const heroable = heroPool.some((g) => g.src);
+  if (!trek.heroImage.src && !heroable) {
+    fail(
+      trek.id,
+      "no-hero-photograph",
+      "no hero image of its own and not one verified photograph on any of its departures, so the page opens on an empty rectangle",
+    );
+  }
+
   if (!trek.permitsRequired.length) {
     fail(trek.id, "no-permits", "no permits listed — every route in Nepal needs at least one");
   }

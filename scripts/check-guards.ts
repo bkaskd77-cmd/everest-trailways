@@ -13,7 +13,7 @@
  * There are two halves to this file, and they answer different questions.
  *
  * THE LEDGER reads every guard in `scripts/` and extracts the name of every
- * assertion it can emit — currently a hundred and sixty-odd. Each one must
+ * assertion it can emit — currently a hundred and seventy-odd. Each one must
  * then be accounted for: either a mutation below proves it fires, or it is
  * written into UNPROVEN with a reason. An assertion in neither list fails this
  * command. That is the part that holds over time: a rule cannot be added to
@@ -28,7 +28,7 @@
  *
  * What this file deliberately does not claim: that the unproven assertions are
  * working. They are unproven. The count is printed every run rather than
- * rounded off, because a number that says "18 of 166" is doing its job and a
+ * rounded off, because a number that says "20 of 177" is doing its job and a
  * green tick that says "all guards verified" would be the third broken guard.
  *
  * Deliberately not run inside `pnpm build`: it rewrites source files, and a
@@ -259,12 +259,39 @@ const MUTATIONS: Mutation[] = [
     name: "the same photograph in the header and the grid",
     guard: "check-departures.ts",
     file: "src/content/trek-detail.ts",
+    /*
+     * Aimed at the exclusion, not at the category list.
+     *
+     * Adding a category to HEADER_CATEGORIES used to create the overlap. It
+     * stopped once `gridImages` began subtracting whatever the header holds —
+     * the category simply moved sides. The only way to get an image onto both
+     * halves now is to remove that subtraction, which is exactly the line
+     * worth guarding: it is what keeps a promoted photograph from appearing
+     * twice on the page.
+     */
+    break: (s) => s.replace(/\s*!header\.includes\(g\) &&/, ""),
+    expect: "gallery-both-sides",
+  },
+  {
+    // The bug this pair exists for: every slot filled, no photograph in any of
+    // them, and a hero that looks like a broken page.
+    name: "a hero slider of nothing but placeholders",
+    guard: "check-departures.ts",
+    file: "src/content/trek-detail.ts",
     break: (s) =>
       s.replace(
-        'export const HEADER_CATEGORIES = ["landscape", "trail"] as const;',
-        'export const HEADER_CATEGORIES = ["landscape", "trail", "food"] as const;',
+        "  if (preferred.some((g) => g.src)) return preferred;",
+        "  return preferred;",
       ),
-    expect: "gallery-both-sides",
+    expect: "all-placeholder-half",
+  },
+  {
+    name: "a trek page with no photograph to open on",
+    guard: "check-treks.ts",
+    file: "src/content/trek-detail.ts",
+    // Every image becomes a pending slot, so no trek has anything to borrow.
+    break: (s) => s.replace(/^(\s*)src:/gm, "$1pendingSrc:"),
+    expect: "no-hero-photograph",
   },
   {
     name: "a gallery category that renders in neither half",
@@ -304,7 +331,33 @@ const MUTATIONS: Mutation[] = [
  */
 const UNPROVEN: Record<string, string> = {};
 
-const KIND = { structural: "structural", adjacent: "adjacent", untested: "untested" } as const;
+const KIND = {
+  structural: "structural",
+  adjacent: "adjacent",
+  untested: "untested",
+  /*
+   * Proven by running, not by mutating.
+   *
+   * `qa-pages.ts` asserts against a browser holding a real page — overflow,
+   * empty sections, content that never painted. Mutation-testing those would
+   * mean rebuilding the site inside this script and breaking a stylesheet to
+   * see whether the checker notices, which is a slower and less honest version
+   * of what `pnpm qa` already does every time it runs against a real build.
+   */
+  runtime: "runtime",
+} as const;
+
+for (const rule of [
+  "horizontal-overflow",
+  "page-never-revealed",
+  "empty-section",
+  "broken-image",
+  "thin-page",
+  "placeholder-hero",
+  "console-error",
+  "heading-count",
+  "http-status",
+]) UNPROVEN[rule] = KIND.runtime;
 
 /** Rules whose failure shape the compiler already prevents. */
 for (const rule of [
@@ -461,7 +514,7 @@ for (const [rule, files] of all) {
    accounting for anything, and it hides the rule that replaced it. */
 const stale = Object.keys(UNPROVEN).filter((rule) => !all.has(rule));
 
-const counts = { structural: 0, adjacent: 0, untested: 0 };
+const counts = { structural: 0, adjacent: 0, untested: 0, runtime: 0 };
 for (const rule of all.keys()) {
   const kind = UNPROVEN[rule];
   if (kind && kind in counts) counts[kind as keyof typeof counts] += 1;
@@ -474,6 +527,9 @@ console.log(`    ${provenHere} proven live by a mutation above`);
 console.log(`    ${counts.structural} structural — the compiler forbids the failing shape`);
 console.log(`    ${counts.adjacent} adjacent — a sibling rule on the same path is mutated`);
 console.log(`    ${counts.untested} untested — no reason beyond time`);
+console.log(
+  `    ${counts.runtime} runtime — asserted against a real page by \`pnpm qa\``,
+);
 
 if (unaccounted.length) {
   console.log("\n  Assertions accounted for nowhere:");

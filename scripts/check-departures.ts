@@ -732,6 +732,51 @@ for (const d of departures) {
   }
 
   /*
+   * A half made entirely of placeholders.
+   *
+   * The rule above counts images and this one counts photographs, and the
+   * difference is the whole bug. The category split shipped three departures
+   * whose header slider was three grey panels and nothing else — every slot
+   * filled, every guard green, and a page that looked broken to anyone who
+   * opened it. `headerImages` now promotes a photograph into an empty header;
+   * this fails if that ever stops working.
+   *
+   * Only enforced where the pool has a photograph to give. A trek with no
+   * verified photography at all is an honest gap and is reported separately,
+   * not failed — the placeholder panel exists precisely so that gap can be
+   * shown rather than filled with something plausible.
+   */
+  const photographs = d.gallery.filter((image) => image.src).length;
+
+  /*
+   * The header comes first when there is only one photograph to go round.
+   *
+   * With a single verified photograph and two sections, one of them is going
+   * to be all placeholders, and it should not be the hero: the hero is
+   * full-bleed and above the fold, where a grey panel reads as a broken page.
+   * The same panel among small thumbnails reads as what it is, a photograph
+   * not taken yet.
+   *
+   * So the header is owed a photograph as soon as there is one, and the grid
+   * as soon as there are two. Written as a threshold rather than a special
+   * case, because that is what it is.
+   */
+  if (photographs >= 1 && !header.some((image) => image.src)) {
+    fail(
+      id,
+      "all-placeholder-half",
+      `the header slider is ${header.length} placeholder${header.length === 1 ? "" : "s"} and no photograph, and the gallery holds ${photographs}`,
+    );
+  }
+  if (photographs >= 2 && grid.length && !grid.some((image) => image.src)) {
+    fail(
+      id,
+      "all-placeholder-half",
+      `the gallery grid is ${grid.length} placeholder${grid.length === 1 ? "" : "s"} and no photograph, and the gallery holds ${photographs}`,
+    );
+  }
+
+  /*
    * A photograph needs alt text. A pending slot does not — it renders as a
    * captioned panel whose accessible name is the caption, so alt would be a
    * second copy of it.
