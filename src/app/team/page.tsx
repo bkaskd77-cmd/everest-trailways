@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 
+import { pageMetadata } from "@/lib/metadata";
+
 import { JsonLd } from "@/components/json-ld";
 import { Reveal, StaggerGroup } from "@/components/motion";
 import { SectionHead } from "@/components/departure/section-head";
@@ -9,12 +11,12 @@ import { GUIDES, PORTERS, rosterSummary } from "@/content/guides";
 import { departures } from "@/content/departures";
 import { siteConfig } from "@/lib/site";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "The guiding team",
   description:
     "Every guide, their certification and what altitude it covers, their licence number and how to check it, first aid and its expiry, and the departures they are assigned to.",
-  alternates: { canonical: "/team" },
-};
+  path: "/team",
+});
 
 /**
  * The proof behind "no middlemen".

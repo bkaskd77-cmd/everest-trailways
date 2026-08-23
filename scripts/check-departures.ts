@@ -1058,10 +1058,10 @@ for (const d of departures) {
         text.split(/(?<=[.!?])\s+/).find((part) => part.includes(line.label)) ??
         "";
       if (
-        !/we\s+(arrange|provide|collect|book|include|organise|cover|pay|supply|handle)/i.test(
+        !/\bwe\s+(arrange|provide|collect|book|include|organise|cover|pay|supply|handle)\b/i.test(
           sentence,
         ) &&
-        !/is included/i.test(sentence)
+        !/\bis included\b/i.test(sentence)
       ) {
         continue;
       }
@@ -2089,6 +2089,29 @@ for (const guide of GUIDES) {
       guide.id,
       "unverified-licence-number",
       `carries licence number "${guide.licenceNumber}" while pending`,
+    );
+  }
+  /*
+   * A name is a claim in exactly the way a licence number is.
+   *
+   * The licence half was guarded in step 12 and the name half was not, which
+   * left the easier lie unguarded: "Pemba Sherpa, lead guide" reads as a real
+   * person to every visitor, needs no document to type, and nobody would ever
+   * think to check it. The seed says PLACEHOLDER on purpose. A pending record
+   * that has stopped saying so is a person we have invented.
+   */
+  if (guide.status !== "verified" && !/PLACEHOLDER/.test(guide.name)) {
+    fail(
+      guide.id,
+      "unverified-name",
+      `is named "${guide.name}" while pending — a name on the team page claims a person exists, and it is the easiest claim here to make and the hardest to check`,
+    );
+  }
+  if (guide.status === "verified" && /PLACEHOLDER/.test(guide.name)) {
+    fail(
+      guide.id,
+      "verified-without-a-person",
+      "is marked verified while still named PLACEHOLDER, so the status claims more than the record holds",
     );
   }
   if (!CERTIFICATION_TIERS.some((t) => t.level === guide.certificationLevel)) {

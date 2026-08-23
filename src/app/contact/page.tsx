@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+
+import { pageMetadata } from "@/lib/metadata";
 import { MessageCircle, Mail, MapPin } from "lucide-react";
 
 import { JsonLd } from "@/components/json-ld";
@@ -8,12 +10,12 @@ import { ContactForm } from "@/components/contact/contact-form";
 import { ANSWER_SPEED, CONTACT } from "@/content/contact";
 import { siteConfig } from "@/lib/site";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Contact",
   description:
     "WhatsApp, email or a form. What we can answer immediately and what needs a day, our hours in Nepal time, and the office you can walk into.",
-  alternates: { canonical: "/contact" },
-};
+  path: "/contact",
+});
 
 /**
  * Not a form dump.

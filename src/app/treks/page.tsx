@@ -1,18 +1,20 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 
+import { pageMetadata } from "@/lib/metadata";
+
 import { JsonLd } from "@/components/json-ld";
 import { TrekIndex, type TrekCard } from "@/components/trek/trek-index";
 import { TREK_PAGES } from "@/content/trek-pages";
 import { bookableFor, priceRange, trekDepartures } from "@/lib/treks";
 import { siteConfig } from "@/lib/site";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Treks",
   description:
     "Every route we run, one page each: the full route, the month-by-month season, what it costs, who it is wrong for, and every date on it — including the ones that did not run.",
-  alternates: { canonical: "/treks" },
-};
+  path: "/treks",
+});
 
 /**
  * Every route we run.

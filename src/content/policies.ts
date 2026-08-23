@@ -62,11 +62,20 @@ export const POLICIES: PolicyDocument[] = [
     path: "/safety",
     title: "Safety",
     binding: false,
-    reviewStatus: "approved",
-    approvedBy: "Operations",
-    approvedOn: "2026-08-23",
+    /*
+     * Not approved, and it should never have been.
+     *
+     * It rendered "Approved by Operations" over four unwritten sections — the
+     * equipment list, the evacuation commission position, porter load and
+     * insurance figures, and incident reporting. One of those carries a note
+     * saying it "must not ship vague", which is a document arguing with its
+     * own status line. Approval is a claim like any other and has to be earned
+     * by the content; `check:policies` now fails an approved document that
+     * still renders a placeholder.
+     */
+    reviewStatus: "draft",
     lastReviewed: "2026-08-23",
-    note: "Operational commitments rather than contract terms. The figures still to be confirmed — porter load limits, the equipment list, the evacuation commission position — are marked PLACEHOLDER where they appear rather than presented as settled.",
+    note: "Four sections are still unwritten: the equipment carried at altitude, our position on evacuation commission, porter load limits and insurance figures, and incident reporting. What is settled — the descent rule, the ratios, acclimatisation, rescue coordination and the limits of what we do — is written in full and is not waiting on those.",
   },
   {
     id: "pricing",

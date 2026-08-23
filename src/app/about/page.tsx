@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 
+import { pageMetadata } from "@/lib/metadata";
+
 import { JsonLd } from "@/components/json-ld";
 import { Reveal } from "@/components/motion";
 import { SectionHead } from "@/components/departure/section-head";
@@ -10,12 +12,12 @@ import { bookableDepartures, departures } from "@/content/departures";
 import { ACTIVITIES } from "@/content/activities";
 import { siteConfig } from "@/lib/site";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "About",
   description:
     "What we sell and what we do not, that we run our own departures rather than broker them, how the guarantee works, and an honest account of what we are new at.",
-  alternates: { canonical: "/about" },
-};
+  path: "/about",
+});
 
 /**
  * Why the company exists, without the sentence every operator writes.

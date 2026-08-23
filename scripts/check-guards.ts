@@ -358,7 +358,10 @@ const MUTATIONS: Mutation[] = [
     name: "a departure contradicting the published guide ratio",
     guard: "check-documents.ts",
     file: "src/content/safety.ts",
-    break: (s) => s.replace('guideRatio: "1:8",', 'guideRatio: "1:4",'),
+    /* Renamed in step 13: a band declares a commitment, not a reading.
+       Tightening the lowest band makes the departures already running
+       1:8 inside it breach what the page promises. */
+    break: (s) => s.replace('commitment: "1:8"', 'commitment: "1:4"'),
     expect: "ratio-contradicts-safety",
   },
   {
@@ -603,6 +606,139 @@ const MUTATIONS: Mutation[] = [
       ),
     expect: "FAIL",
   },
+  /* ------------------------------------------------------------- step 13 */
+  {
+    /*
+     * The one that started this step. The band above 4,500 m published 1:8
+     * while every departure in it ran 1:4, so no departure could ever breach
+     * the commitment — a standard set at the weakest value it can take.
+     */
+    name: "a commitment set so loose that nothing can breach it",
+    guard: "check-documents.ts",
+    file: "src/content/safety.ts",
+    break: (s) => s.replace('commitment: "1:4"', 'commitment: "1:8"'),
+    expect: "unfalsifiable-standard",
+  },
+  {
+    name: "a band note promising a second guide nobody carries",
+    guard: "check-documents.ts",
+    file: "src/content/safety.ts",
+    break: (s) =>
+      s.replace('note: "', 'note: "A second guide joins the group. '),
+    expect: "band-note-contradicts-staffing",
+  },
+  {
+    /*
+     * The shape of the original fault: a ratio typed into a page, correct on
+     * the day it was written and wrong the moment a departure changed.
+     */
+    name: "a guide ratio typed into a page instead of read from the data",
+    guard: "check-documents.ts",
+    file: "src/app/about/page.tsx",
+    break: (s) => s.replace("<h1", "<p>We run 1:4 everywhere.</p><h1"),
+    expect: "typed-ratio-claim",
+  },
+  {
+    name: "a roster count typed beside the roster",
+    guard: "check-documents.ts",
+    file: "src/app/team/page.tsx",
+    break: (s) =>
+      s.replace("{summary.withLicenceNumber} of {summary.total}", "0 of 4"),
+    expect: "team-figures-not-derived",
+  },
+  {
+    name: "a team summary that disagrees with the records",
+    guard: "check-documents.ts",
+    file: "src/content/guides.ts",
+    break: (s) =>
+      s.replace("total: GUIDES.length,", "total: GUIDES.length + 1,"),
+    expect: "team-summary-contradicts-records",
+  },
+  {
+    /*
+     * Every dynamic route inherited the layout's og:url — the homepage — so
+     * every share of a departure previewed as the front page. Invisible from
+     * inside the site; visible in somebody else's chat window.
+     */
+    name: "a page whose canonical and share url are not the same path",
+    guard: "check-documents.ts",
+    file: "src/app/treks/[slug]/page.tsx",
+    break: (s) =>
+      s.replace(
+        "url: `${siteConfig.url}/treks/${trek.slug}`",
+        "url: siteConfig.url",
+      ),
+    expect: "canonical-disagrees-with-og-url",
+  },
+  {
+    name: "a page that sets a canonical and no share url at all",
+    guard: "check-documents.ts",
+    file: "src/app/activities/[slug]/page.tsx",
+    break: (s) =>
+      s.replace("      url: `${siteConfig.url}/activities/${a.slug}`,\n", ""),
+    expect: "canonical-without-og-url",
+  },
+  {
+    /*
+     * An approved document with PLACEHOLDER sections. /safety carried an
+     * approval over four unwritten ones, including a note saying the section
+     * "must not ship vague" — a document arguing with its own status line.
+     */
+    name: "an approval over a document that is not written",
+    guard: "check-policies.ts",
+    file: "src/content/policies.ts",
+    break: (s) =>
+      s.replace(
+        'reviewStatus: "draft"',
+        'reviewStatus: "approved", approvedBy: "Operations", approvedOn: "2026-08-23"',
+      ),
+    expect: "approved-with-placeholders",
+  },
+  {
+    /*
+     * The fault that has now killed five guards. A `\\b` written through a
+     * shell heredoc becomes a literal backspace, which renders as nothing in
+     * every editor and matches nothing at runtime.
+     */
+    name: "a regex escape mangled into a control character",
+    guard: "check-source-bytes.ts",
+    file: "src/lib/metadata.ts",
+    break: (s) =>
+      s.replace("const url =", "const url" + JSON.parse('"\\u0008"') + " ="),
+    expect: "control-character",
+  },
+  {
+    /*
+     * A verify link pointing at a public register while the record is not in
+     * it. Follow it, search, find nothing, conclude we are lying — and that
+     * is a reasonable conclusion from what the page showed.
+     */
+    name: "a verify link claiming proof a pending credential cannot give",
+    guard: "check-trust.ts",
+    file: "src/content/trust-points.ts",
+    break: (s) =>
+      s.replace(
+        'const isVerified = credential?.status === "verified";',
+        "const isVerified = true;",
+      ),
+    expect: "verify-overstates-proof",
+  },
+  {
+    /*
+     * The easiest lie on the site: a name needs no document to type and
+     * nobody would think to check it. The licence half was guarded in step
+     * 12 and this half was not.
+     */
+    name: "a guide given a real name while the record is unverified",
+    guard: "check-departures.ts",
+    file: "src/content/guides.ts",
+    break: (s) =>
+      s.replace(
+        'name: "PLACEHOLDER \u2014 lead guide, Khumbu"',
+        'name: "Pemba Sherpa"',
+      ),
+    expect: "unverified-name",
+  },
 ];
 
 /* -------------------------------------------------------------- the ledger */
@@ -700,6 +836,9 @@ for (const rule of [
   "incoherent-archive",
   "no-permits",
   "map-too-cramped",
+  /* Step 13 siblings, on the same code path as a mutated rule above. */
+  "verified-without-a-person",
+  "verify-names-unknown-credential",
   /* Step 12 siblings, on the same code path as a mutated rule above. */
   "unknown-guide",
   "understaffed-for-ratio",

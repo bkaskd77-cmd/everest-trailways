@@ -1,16 +1,18 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+
+import { pageMetadata } from "@/lib/metadata";
 import { ArrowRight } from "lucide-react";
 
 import { Reveal, StaggerGroup } from "@/components/motion";
 import { REGIONS, bookableFor, regionSlug, treksInRegion } from "@/lib/treks";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Regions",
   description:
     "Khumbu, Annapurna, Langtang, Mustang, the Terai and the Kathmandu Valley rim, with the routes we run in each and how many dates are open on them.",
-  alternates: { canonical: "/regions" },
-};
+  path: "/regions",
+});
 
 /**
  * Nepal, by where you would be.

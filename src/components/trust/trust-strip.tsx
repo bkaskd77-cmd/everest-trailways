@@ -114,7 +114,7 @@ export function TrustStrip() {
             // verify links previously sat at four different heights.
             className="grid grid-cols-1 sm:grid-cols-2 sm:grid-rows-[repeat(2,auto_auto_1fr_auto_auto)] lg:grid-cols-4 lg:grid-rows-[auto_auto_1fr_auto_auto]"
           >
-            {trustPoints.map((point, index) => {
+            {trustPoints().map((point, index) => {
               const rules = RULE_VISIBILITY(index);
               return (
                 <Reveal

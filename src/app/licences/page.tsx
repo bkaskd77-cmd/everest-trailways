@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 
+import { pageMetadata } from "@/lib/metadata";
+
 import { isApproved, policyById } from "@/content/policies";
 
 import {
@@ -21,15 +23,15 @@ const policyIsApproved = (id: string) => {
   return Boolean(p && isApproved(p));
 };
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Licences and registrations",
   description:
     "Every licence, registration, membership and policy we hold, what each one actually establishes, what it does not, and how to check it without asking us.",
+  path: "/licences",
   robots: policyIsApproved("licences")
     ? { index: true, follow: true }
     : { index: false, follow: true },
-  alternates: { canonical: "/licences" },
-};
+});
 
 /**
  * What we hold, and what it is worth.

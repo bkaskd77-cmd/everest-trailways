@@ -83,6 +83,73 @@ for (const p of POLICIES) {
   }
 }
 
+/* ------------------------------------------- approval means finished */
+
+/*
+ * An approved document with unwritten sections is not approved.
+ *
+ * /safety rendered "Approved by Operations on 23 August 2026" over four
+ * PLACEHOLDER sections — the equipment list, the evacuation commission
+ * position, porter load and insurance figures, and incident reporting. One of
+ * those says in its own note that it "must not ship vague", which is a
+ * document arguing with its own status line.
+ *
+ * Approval is a claim like every other claim on this site and has to be earned
+ * by the content. The sources each document renders from are named here, so
+ * the check reads what the page actually says rather than the page file, which
+ * would only find the markup.
+ */
+const DOCUMENT_SOURCES: Record<string, string[]> = {
+  safety: ["src/content/safety.ts"],
+  cancellation: ["src/content/cancellation.ts"],
+  pricing: [],
+  licences: ["src/content/credentials.ts"],
+};
+
+/*
+ * Markers for something UNWRITTEN, not for something honestly pending.
+ *
+ * Two faults lived on this line. A bare /pending/i was in the list and was
+ * wrong — the licences page renders "pending" on every credential
+ * deliberately, beside a badge saying so, which is the page working rather
+ * than failing. And the word boundaries had been mangled into literal
+ * backspace bytes by a shell heredoc, so three of the four markers matched
+ * nothing at all. That is the third time this project has shipped a guard
+ * killed by \\b in a heredoc.
+ */
+const PLACEHOLDER_MARKERS = [/PLACEHOLDER/, /\bTBD\b/, /\bTODO\b/];
+
+for (const policy of POLICIES) {
+  if (!isApproved(policy)) continue;
+
+  for (const file of DOCUMENT_SOURCES[policy.id] ?? []) {
+    const source = await readFile(path.join(root, file), "utf8").catch(
+      () => "",
+    );
+    if (!source) continue;
+
+    /*
+     * Only what the page renders. A comment explaining why a figure is absent
+     * is the documentation working; a PLACEHOLDER inside a string the reader
+     * sees is an unwritten section wearing an approval.
+     */
+    const rendered = [...source.matchAll(/"(?:[^"\\]|\\.)*"/g)].map(
+      (m) => m[0],
+    );
+
+    for (const marker of PLACEHOLDER_MARKERS) {
+      const hit = rendered.find((text) => marker.test(text));
+      if (!hit) continue;
+      fail(
+        policy.id,
+        "approved-with-placeholders",
+        `is marked approved while ${file} still renders ${hit.slice(0, 60)}… — an approved document with unwritten sections is not approved`,
+      );
+      break;
+    }
+  }
+}
+
 /* -------------------------------------------------- pages that cite them */
 
 /*

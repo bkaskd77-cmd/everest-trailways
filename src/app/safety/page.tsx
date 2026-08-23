@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 
+import { pageMetadata } from "@/lib/metadata";
+
 import { isApproved, policyById } from "@/content/policies";
 
 import {
@@ -19,6 +21,8 @@ import {
   RESCUE_COORDINATION,
   WHAT_WE_DO_NOT_DO,
   bandFor,
+  bandReality,
+  secondGuideSentence,
   certificationTierSet,
 } from "@/content/safety";
 import { departures } from "@/content/departures";
@@ -36,15 +40,15 @@ const policyIsApproved = (id: string) => {
   return Boolean(p && isApproved(p));
 };
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Safety",
   description:
     "Guide ratios by altitude, the certification each band requires, the descent rule, acclimatisation, rescue coordination, porter welfare — and what we do not do.",
+  path: "/safety",
   robots: policyIsApproved("safety")
     ? { index: true, follow: true }
     : { index: false, follow: true },
-  alternates: { canonical: "/safety" },
-};
+});
 
 /**
  * Safety as a table, not as reassurance.
@@ -57,6 +61,15 @@ export const metadata: Metadata = {
  */
 export default function SafetyPage() {
   const tiers = certificationTierSet();
+
+  /*
+   * The highest band's real spread, for the paragraph that explains the two
+   * columns. Derived rather than written, because a sentence about a ratio is
+   * a ratio claim like any other — the guard reads this page too, and it was
+   * right to fail my first draft of that paragraph for citing "1:8" and "1:4"
+   * as literals.
+   */
+  const highest = bandReality(RATIO_BANDS[RATIO_BANDS.length - 1], departures);
 
   /* Every departure, grouped by the band its altitude puts it in. */
   const byBand = RATIO_BANDS.map((band) => ({
@@ -95,12 +108,23 @@ export default function SafetyPage() {
         title="Guide ratios by altitude, and the certification each band needs"
         lead={
           <p>
-            Nepal certifies trekking guides in altitude-banded tiers. The tier
-            names and bands below are{" "}
-            <strong>placeholders pending the current regulation</strong> — they
-            are stored as data precisely because thresholds change, and a number
-            invented here would be checkable against the real rule and found
-            wrong.
+            Two columns, because they are two different claims. The first is a
+            ceiling we commit to and will not exceed. The second is read from
+            the departures on sale today, and it is the one you can check
+            against a trek page in thirty seconds.
+            <br />
+            <br />
+            They were one column, and it published the same loose ceiling in
+            every band while the highest band actually ran{" "}
+            {highest.ratios.join(" or ")} on all {highest.count} of its
+            departures — a standard written so that nothing could ever breach
+            it. The build now fails a commitment looser than every departure
+            operating under it.
+            <br />
+            <br />
+            Certification tier names and bands are{" "}
+            <strong>placeholders pending the current regulation</strong>, stored
+            as data precisely because thresholds change.
           </p>
         }
       >
@@ -122,7 +146,13 @@ export default function SafetyPage() {
                   scope="col"
                   className="py-3 pr-4 text-xs tracking-[0.14em] text-muted-foreground uppercase"
                 >
-                  Guide ratio
+                  We will not exceed
+                </th>
+                <th
+                  scope="col"
+                  className="py-3 pr-4 text-xs tracking-[0.14em] text-muted-foreground uppercase"
+                >
+                  Currently running
                 </th>
                 <th
                   scope="col"
@@ -150,13 +180,30 @@ export default function SafetyPage() {
                       : `Above ${b.aboveM.toLocaleString("en-GB")} m`}
                   </th>
                   <td className="py-4 pr-4 align-top tabular">
-                    {b.guideRatio}
+                    {b.commitment}
+                  </td>
+                  <td className="py-4 pr-4 align-top tabular">
+                    {(() => {
+                      const r = bandReality(b, departures);
+                      if (!r.count) return "nothing on sale";
+                      return r.ratios.length === 1
+                        ? r.ratios[0]
+                        : `${r.strictest} to ${r.loosest}`;
+                    })()}
                   </td>
                   <td className="py-4 pr-4 align-top tabular">
                     {b.requiresTierAtLeastM.toLocaleString("en-GB")} m
                   </td>
                   <td className="max-w-[46ch] py-4 align-top text-muted-foreground">
                     {b.note}
+                    {secondGuideSentence(b, departures) && (
+                      <>
+                        {" "}
+                        <span className="text-foreground">
+                          {secondGuideSentence(b, departures)}
+                        </span>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -208,7 +255,7 @@ export default function SafetyPage() {
                 {band.aboveM === 0
                   ? "Below 3,000 m"
                   : `Above ${band.aboveM.toLocaleString("en-GB")} m`}{" "}
-                — {band.guideRatio}
+                — we will not exceed {band.commitment}
               </h3>
               <ul className="mt-3 grid gap-2">
                 {list.map((d) => (

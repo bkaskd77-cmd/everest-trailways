@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 
+import { pageMetadata } from "@/lib/metadata";
+
 import { isApproved, policyById } from "@/content/policies";
 
 import {
@@ -21,15 +23,15 @@ const policyIsApproved = (id: string) => {
   return Boolean(p && isApproved(p));
 };
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Cancellation and refunds",
   description:
     "What happens if we cancel, what happens if you cancel, what is non-refundable and why, transfers, refund method and timeline, force majeure, and leaving mid-trek.",
+  path: "/cancellation",
   robots: policyIsApproved("cancellation")
     ? { index: true, follow: true }
     : { index: false, follow: true },
-  alternates: { canonical: "/cancellation" },
-};
+});
 
 /**
  * The one page on this site that binds the company.

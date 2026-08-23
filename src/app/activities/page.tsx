@@ -1,17 +1,19 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 
+import { pageMetadata } from "@/lib/metadata";
+
 import { JsonLd } from "@/components/json-ld";
 import { ActivityIndex } from "@/components/activity/activity-index";
 import { ACTIVITIES } from "@/content/activities";
 import { siteConfig } from "@/lib/site";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Activities",
   description:
     "Rafting, paragliding, safari, cycling, cultural days and one climb — run on demand or in season rather than as fixed group departures, with the same itemised cost sheet.",
-  alternates: { canonical: "/activities" },
-};
+  path: "/activities",
+});
 
 /**
  * The second product type.

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 
+import { pageMetadata } from "@/lib/metadata";
+
 import { isApproved, policyById } from "@/content/policies";
 
 import {
@@ -26,15 +28,15 @@ const policyIsApproved = (id: string) => {
   return Boolean(p && isApproved(p));
 };
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "How we price",
   description:
     "What all-in means, what it excludes, why the same route costs different amounts on different dates, what the reserves fund, and what our fee is as a share of the price.",
+  path: "/pricing",
   robots: policyIsApproved("pricing")
     ? { index: true, follow: true }
     : { index: false, follow: true },
-  alternates: { canonical: "/pricing" },
-};
+});
 
 /**
  * The methodology behind every cost sheet.

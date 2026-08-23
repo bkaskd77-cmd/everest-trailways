@@ -3,18 +3,20 @@ import { Suspense } from "react";
 import Link from "next/link";
 import type { Metadata } from "next";
 
+import { pageMetadata } from "@/lib/metadata";
+
 import { DepartureIndex } from "@/components/departure/departure-index";
 import { departureJsonLd } from "@/lib/departures-feed";
 import { bookableDepartures, departures } from "@/content/departures";
 import { siteConfig } from "@/lib/site";
 import { JsonLd } from "@/components/json-ld";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "All departures",
   description:
     "Every fixed departure we have on sale, with its published minimum to run, current bookings and decision date.",
-  alternates: { canonical: "/departures" },
-};
+  path: "/departures",
+});
 
 /**
  * Every departure, filterable.

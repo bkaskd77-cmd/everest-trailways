@@ -32,6 +32,19 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: siteConfig.locale,
+    /*
+     * The homepage's own url, and only the homepage's.
+     *
+     * Next MERGES metadata rather than replacing it, so this was inherited by
+     * every page that did not restate it — which was all of them except the
+     * four dynamic routes. Every share of a trek, a policy or the team page
+     * previewed as the front page, and it is invisible from inside the site
+     * because it only shows up in somebody else's chat window.
+     *
+     * Pages now build both canonical and og:url from one path via
+     * `pageMetadata`, and `check:documents` fails a page that sets one
+     * without the other.
+     */
     url: siteConfig.url,
     siteName: siteConfig.name,
     title: `${siteConfig.name} — ${siteConfig.tagline}`,
