@@ -284,6 +284,19 @@ const MUTATIONS: Mutation[] = [
     break: (s) => s.replace(/^(\s*)src:/gm, "$1pendingSrc:"),
     expect: "no-hero-photograph",
   },
+  {
+    /*
+     * The exact regression that made the Langtang diagram unreadable: label
+     * placement that only ever tried one position per dot, so two stops close
+     * together printed through each other.
+     */
+    name: "route labels with nowhere to move",
+    guard: "check-departures.ts",
+    file: "src/lib/route-diagram.ts",
+    break: (s) =>
+      s.replace(/for \(const dy of \[[^\]]*\]\) \{/, "for (const dy of [0]) {"),
+    expect: "map-labels-collide",
+  },
 ];
 
 /* -------------------------------------------------------------- the ledger */
@@ -380,6 +393,7 @@ for (const rule of [
   "thin-disqualifiers",
   "incoherent-archive",
   "no-permits",
+  "map-too-cramped",
   "gallery-missing-basics",
   "gallery-thin-caption",
   "gallery-no-alt",

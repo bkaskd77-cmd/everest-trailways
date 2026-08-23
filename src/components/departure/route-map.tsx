@@ -1,4 +1,11 @@
 import type { ItineraryDay } from "@/content/departures";
+import {
+  H,
+  W,
+  labelCollisions,
+  layoutRoute,
+  routeLine,
+} from "@/lib/route-diagram";
 
 /**
  * The route, drawn from coordinates.
@@ -14,78 +21,13 @@ import type { ItineraryDay } from "@/content/departures";
  * through fifty approximate positions is not something to walk by. The page
  * says so under the drawing.
  *
+ * The geometry lives in `@/lib/route-diagram` rather than here, because the
+ * thing worth checking about this drawing is arithmetic — whether two labels
+ * land on top of each other — and a guard can run that over every departure
+ * without rendering anything.
+ *
  * Server-rendered, no client JavaScript. It never changes after paint.
  */
-
-type Point = { day: ItineraryDay; x: number; y: number };
-
-const W = 720;
-const H = 420;
-const PAD = 64;
-
-/**
- * Equirectangular, with the longitude squeezed by the cosine of the mean
- * latitude.
- *
- * At Nepal's latitude a degree of longitude is about 88km against 111km for a
- * degree of latitude, so plotting raw lat/lon stretches every east-west trek
- * sideways by a quarter. Correcting it is one multiplication and it is the
- * difference between a route that looks like the walk and one that does not.
- */
-function project(days: ItineraryDay[]): Point[] {
-  const withCoords = days.filter((d) => d.coords);
-  if (!withCoords.length) return [];
-
-  const lats = withCoords.map((d) => d.coords![0]);
-  const lons = withCoords.map((d) => d.coords![1]);
-  const meanLat = (Math.min(...lats) + Math.max(...lats)) / 2;
-  const squeeze = Math.cos((meanLat * Math.PI) / 180);
-
-  const xs = lons.map((lon) => lon * squeeze);
-  const ys = lats;
-
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-
-  // A trek that walks out and back covers almost no ground in one axis, so the
-  // span is floored — without it the line would be scaled up into a meaningless
-  // zigzag across the full width.
-  const spanX = Math.max(maxX - minX, 0.02);
-  const spanY = Math.max(maxY - minY, 0.02);
-  const scale = Math.min((W - PAD * 2) / spanX, (H - PAD * 2) / spanY);
-
-  const offsetX = (W - spanX * scale) / 2;
-  const offsetY = (H - spanY * scale) / 2;
-
-  return withCoords.map((day, i) => ({
-    day,
-    x: offsetX + (xs[i] - minX) * scale,
-    // Latitude increases northward, y increases downward.
-    y: H - offsetY - (ys[i] - minY) * scale,
-  }));
-}
-
-/**
- * Where a label sits relative to its dot.
- *
- * Out-and-back routes revisit places, so labels stack. Alternating the side by
- * index is crude and it is enough: it separates consecutive stops, which is
- * where collisions actually happen.
- */
-function anchorFor(
-  index: number,
-  x: number,
-): {
-  dx: number;
-  anchor: "start" | "end";
-} {
-  const preferEnd = x > W * 0.62;
-  const flip = index % 2 === 1;
-  const toLeft = preferEnd !== flip;
-  return toLeft ? { dx: -9, anchor: "end" } : { dx: 9, anchor: "start" };
-}
 
 export function RouteMap({
   itinerary,
@@ -94,36 +36,21 @@ export function RouteMap({
   itinerary: ItineraryDay[];
   trekName: string;
 }) {
-  const points = project(itinerary);
-  if (points.length < 2) return null;
+  const stops = layoutRoute(itinerary);
+  if (stops.length < 2) return null;
 
-  const line = points
-    .map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)
-    .join(" ");
+  const line = routeLine(itinerary);
+  const start = stops.find((s) => s.isStart);
+  const end = stops.find((s) => s.isEnd);
 
   /*
-   * One dot per place, not one per night.
-   *
-   * An out-and-back sleeps at Namche three times and the map should show one
-   * Namche with three nights, not three dots on top of each other.
+   * Belt and braces. The layout resolves every collision on the current data
+   * and the guard fails the build if it stops doing so, but a route added on a
+   * Friday should degrade rather than print two names through each other — so
+   * if anything still clashes, the labels drop to the smaller size, which
+   * gives the placement more room to have worked with.
    */
-  const seen = new Map<
-    string,
-    { point: Point; nights: number; days: number[] }
-  >();
-  for (const point of points) {
-    const key = point.day.toPlace;
-    const existing = seen.get(key);
-    if (existing) {
-      existing.nights += 1;
-      existing.days.push(point.day.day);
-    } else {
-      seen.set(key, { point, nights: 1, days: [point.day.day] });
-    }
-  }
-  const stops = [...seen.values()];
-  const start = points[0];
-  const end = points[points.length - 1];
+  const crowded = labelCollisions(stops).length > 0;
 
   return (
     <figure className="m-0">
@@ -134,8 +61,8 @@ export function RouteMap({
           height={H}
           preserveAspectRatio="xMidYMid meet"
           role="img"
-          aria-label={`Schematic route for ${trekName}, through ${stops.length} overnight stops from ${start.day.toPlace} to ${end.day.toPlace}. Every stop is named in the day-by-day itinerary below.`}
-          className="block min-w-[560px]"
+          aria-label={`Schematic route for ${trekName}, through ${stops.length} overnight stops from ${start?.place} to ${end?.place}. Every stop is named in the day-by-day itinerary below.`}
+          className="block min-w-[600px]"
         >
           {/* The walked line. Drawn once, under everything. */}
           <polyline
@@ -145,70 +72,90 @@ export function RouteMap({
             strokeWidth={2}
             strokeLinejoin="round"
             strokeLinecap="round"
-            strokeDasharray="1 0"
           />
 
-          {stops.map(({ point, nights }, i) => {
-            const isStart = point.day.day === start.day.day;
-            const isEnd = point.day.day === end.day.day;
-            const { dx, anchor } = anchorFor(i, point.x);
+          {stops.map((stop) => (
+            <g key={stop.place}>
+              {/* Acclimatisation stops carry the same square mark the altitude
+                  profile uses, so the two diagrams agree. */}
+              {stop.isAcclimatisation ? (
+                <rect
+                  x={stop.x - 4.5}
+                  y={stop.y - 4.5}
+                  width={9}
+                  height={9}
+                  className="fill-background stroke-foreground"
+                  strokeWidth={2}
+                />
+              ) : (
+                <circle
+                  cx={stop.x}
+                  cy={stop.y}
+                  r={stop.isStart || stop.isEnd ? 6 : 4}
+                  className={
+                    stop.isStart || stop.isEnd
+                      ? "fill-foreground"
+                      : "fill-background stroke-foreground"
+                  }
+                  strokeWidth={2}
+                />
+              )}
 
-            return (
-              <g key={point.day.toPlace}>
-                {/* Acclimatisation stops carry the same square mark the
-                    altitude profile uses, so the two diagrams agree. */}
-                {point.day.isAcclimatisation ? (
-                  <rect
-                    x={point.x - 4.5}
-                    y={point.y - 4.5}
-                    width={9}
-                    height={9}
-                    className="fill-background stroke-foreground"
-                    strokeWidth={2}
-                  />
-                ) : (
-                  <circle
-                    cx={point.x}
-                    cy={point.y}
-                    r={isStart || isEnd ? 6 : 4}
-                    className={
-                      isStart || isEnd
-                        ? "fill-foreground"
-                        : "fill-background stroke-foreground"
-                    }
-                    strokeWidth={2}
-                  />
+              <text
+                x={stop.labelX}
+                y={stop.labelY}
+                textAnchor={stop.anchor}
+                className={
+                  crowded
+                    ? "fill-foreground text-[11px]"
+                    : "fill-foreground text-[12.5px]"
+                }
+                /*
+                 * The line passes under the labels. Painting the stroke first
+                 * and the fill over it gives each name a thin cut-out of page
+                 * colour, so a stop sitting on the route stays readable
+                 * without a box around it.
+                 */
+                style={{ paintOrder: "stroke" }}
+                strokeWidth={3.5}
+                strokeLinejoin="round"
+                stroke="var(--band)"
+              >
+                {stop.place}
+                {stop.nights > 1 && (
+                  <tspan className="fill-muted-foreground">
+                    {" "}
+                    ×{stop.nights}
+                  </tspan>
                 )}
+              </text>
+            </g>
+          ))}
 
-                <text
-                  x={point.x + dx}
-                  y={point.y + 4}
-                  textAnchor={anchor}
-                  className="fill-foreground text-[12px]"
-                >
-                  {point.day.toPlace}
-                  {nights > 1 && (
-                    <tspan className="fill-muted-foreground"> ×{nights}</tspan>
-                  )}
-                </text>
-              </g>
-            );
-          })}
-
-          <text
-            x={start.x}
-            y={start.y - 14}
-            textAnchor="middle"
-            className="fill-muted-foreground text-[10px] tracking-[0.14em] uppercase"
-          >
-            Start
-          </text>
-          {end.day.toPlace !== start.day.toPlace && (
+          {start && (
             <text
-              x={end.x}
-              y={end.y - 14}
+              x={start.x}
+              y={start.y - 15}
               textAnchor="middle"
               className="fill-muted-foreground text-[10px] tracking-[0.14em] uppercase"
+              style={{ paintOrder: "stroke" }}
+              strokeWidth={3.5}
+              strokeLinejoin="round"
+              stroke="var(--band)"
+            >
+              Start
+            </text>
+          )}
+          {end && end.place !== start?.place && (
+            <text
+              x={end.x}
+              y={end.y - 15}
+              textAnchor="middle"
+              className="fill-muted-foreground text-[10px] tracking-[0.14em] uppercase"
+              style={{ paintOrder: "stroke" }}
+              strokeWidth={3.5}
+              strokeLinejoin="round"
+              stroke="var(--band)"
             >
               End
             </text>

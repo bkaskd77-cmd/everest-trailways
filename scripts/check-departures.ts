@@ -36,6 +36,12 @@ import {
   type DepartureStatus,
   heroImages,
 } from "../src/content/departures.ts";
+import {
+  H,
+  W,
+  labelCollisions,
+  layoutRoute,
+} from "../src/lib/route-diagram.ts";
 
 type Problem = { id: string; rule: string; detail: string };
 const problems: Problem[] = [];
@@ -690,6 +696,48 @@ for (const d of departures) {
       );
     }
   }
+  /*
+   * Every name on the route diagram has to be readable.
+   *
+   * The old label rule alternated sides by index, which separates consecutive
+   * stops and nothing else — so two places a few hundred metres apart printed
+   * straight through each other and the drawing became unreadable at exactly
+   * the point it was most needed. Nothing caught it because nothing was
+   * measuring; the SVG was valid and the page rendered.
+   *
+   * The layout is arithmetic, so it can be checked without rendering. This
+   * runs the real placement over the real itinerary and fails on any pair of
+   * label boxes that intersect.
+   */
+  const routeStops = layoutRoute(d.itinerary);
+  for (const [a, b] of labelCollisions(routeStops)) {
+    fail(
+      id,
+      "map-labels-collide",
+      `"${a}" and "${b}" overlap on the route diagram`,
+    );
+  }
+
+  /*
+   * A diagram squeezed into a corner is not much better than an unreadable
+   * one. A route using under a third of the frame in both directions has been
+   * scaled wrong — which is how Langtang ended up a narrow column with every
+   * label stacked inside it.
+   */
+  if (routeStops.length >= 3) {
+    const xs = routeStops.map((s) => s.x);
+    const ys = routeStops.map((s) => s.y);
+    const spreadX = Math.max(...xs) - Math.min(...xs);
+    const spreadY = Math.max(...ys) - Math.min(...ys);
+    if (spreadX < W * 0.3 && spreadY < H * 0.3) {
+      fail(
+        id,
+        "map-too-cramped",
+        `the diagram occupies ${Math.round(spreadX)}x${Math.round(spreadY)} of ${W}x${H}`,
+      );
+    }
+  }
+
   /*
    * The slider must open on a photograph.
    *
