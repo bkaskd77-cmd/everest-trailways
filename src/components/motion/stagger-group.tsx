@@ -10,12 +10,7 @@ import * as m from "motion/react-m";
 // group, because anything else between <table> and <tr> is invalid HTML
 // and the browser hoists it out, taking the animation with it.
 type StaggerGroupElement =
-  | "div"
-  | "section"
-  | "ul"
-  | "ol"
-  | "article"
-  | "tbody";
+  "div" | "section" | "ul" | "ol" | "article" | "tbody";
 
 type StaggerGroupProps = {
   children: React.ReactNode;

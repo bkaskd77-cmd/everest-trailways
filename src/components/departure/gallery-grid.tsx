@@ -45,12 +45,26 @@ export function GalleryGrid({ images }: { images: GalleryImage[] }) {
               className="group block w-full cursor-pointer text-left"
               aria-label={`Open: ${image.caption}`}
             >
-              <GalleryFrame
-                image={image}
-                slot="galleryThumb"
-                minimal
-                className="aspect-4/3 overflow-hidden rounded-md transition-transform duration-300 group-hover:scale-[1.02]"
-              />
+              {/*
+                The frame needs a positioned, sized box around it.
+                <GalleryFrame> renders `absolute inset-0` in every use and says
+                so — it expects its container to give it both. This grid did
+                not: the button is `static` and the aspect ratio was handed
+                down as a class on the image instead. With no positioned
+                ancestor, `inset-0` resolved against the viewport, so every
+                thumbnail painted full-screen over the whole page. They are
+                lazy, so it only appeared once somebody scrolled far enough to
+                load them — which is why the page looked fine until you came
+                back up.
+              */}
+              <div className="relative aspect-4/3 overflow-hidden rounded-md">
+                <GalleryFrame
+                  image={image}
+                  slot="galleryThumb"
+                  minimal
+                  className="transition-transform duration-300 group-hover:scale-[1.02]"
+                />
+              </div>
               <p className="mt-2 text-xs text-muted-foreground">
                 {image.caption}
               </p>

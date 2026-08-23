@@ -257,7 +257,8 @@ export const headerImages = (gallery: GalleryImage[]): GalleryImage[] => {
   if (preferred.some((g) => g.src)) return preferred;
 
   const promoted = gallery.find(
-    (g) => g.src && !(HEADER_CATEGORIES as readonly string[]).includes(g.category),
+    (g) =>
+      g.src && !(HEADER_CATEGORIES as readonly string[]).includes(g.category),
   );
   return promoted ? [promoted, ...preferred] : preferred;
 };

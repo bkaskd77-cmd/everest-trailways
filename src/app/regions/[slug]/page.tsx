@@ -144,7 +144,7 @@ export default async function RegionPage({
                     <p className="mt-2 max-w-[62ch] text-sm text-muted-foreground">
                       {trek.summary}
                     </p>
-                    <p className="tabular mt-3 text-sm text-muted-foreground">
+                    <p className="mt-3 tabular text-sm text-muted-foreground">
                       {trek.typicalDays[0] === trek.typicalDays[1]
                         ? `${trek.typicalDays[0]} days`
                         : `${trek.typicalDays[0]}–${trek.typicalDays[1]} days`}{" "}
@@ -153,7 +153,7 @@ export default async function RegionPage({
                       {dates} {dates === 1 ? "date" : "dates"} open
                     </p>
                   </div>
-                  <p className="tabular flex items-center gap-2 text-lg sm:justify-end">
+                  <p className="flex items-center gap-2 tabular text-lg sm:justify-end">
                     {range ? `from $${range.from.toLocaleString("en-GB")}` : ""}
                     <ArrowRight
                       aria-hidden

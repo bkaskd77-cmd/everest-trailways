@@ -92,8 +92,18 @@ const STATE: Filter[] = [
 ];
 
 const MONTH_SHORT = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
 ];
 
 /** The `YYYY-MM` a departure leaves in. */
@@ -116,7 +126,7 @@ function monthWindow(list: Departure[]) {
   const [toY, toM] = keys[keys.length - 1].split("-").map(Number);
 
   const out: { key: string; label: string }[] = [];
-  for (let y = fromY, m = fromM; y < toY || (y === toY && m <= toM); ) {
+  for (let y = fromY, m = fromM; y < toY || (y === toY && m <= toM);) {
     out.push({
       key: `${y}-${String(m).padStart(2, "0")}`,
       label: `${MONTH_SHORT[m - 1]} ${String(y).slice(2)}`,
@@ -167,7 +177,7 @@ function FilterRow({
           >
             {option.label}
             {typeof option.count === "number" && (
-              <span className="tabular ml-1.5 text-xs opacity-60">
+              <span className="ml-1.5 tabular text-xs opacity-60">
                 {option.count}
               </span>
             )}

@@ -84,7 +84,12 @@ const VIEWPORTS = [
 
 /* ------------------------------------------------------------- the checks */
 
-type Finding = { route: string; viewport: string; rule: string; detail: string };
+type Finding = {
+  route: string;
+  viewport: string;
+  rule: string;
+  detail: string;
+};
 const findings: Finding[] = [];
 
 /** Reported, not enforced — see the reveal-share rule below. */
@@ -252,6 +257,21 @@ try {
           never.push(((el as HTMLElement).innerText || "").trim().slice(0, 50));
         }
         (window as unknown as { __never: string[] }).__never = never;
+
+        /*
+         * Back to the top, because that is where this site broke.
+         *
+         * The gallery thumbnails are lazy. Until somebody scrolls far enough
+         * to load them they do not exist, so a check that only ever reads the
+         * bottom of the page cannot see what they do — which in one case was
+         * to paint full-screen over everything, leaving a reader who scrolled
+         * down and came back up looking at one photograph and nothing else.
+         *
+         * A page is not proven by being loaded. It is proven by being used,
+         * and coming back up is half of using it.
+         */
+        window.scrollTo(0, 0);
+        await wait(1200);
       });
 
       const result = await page.evaluate(() => {
@@ -261,6 +281,73 @@ try {
         const stuck =
           (window as unknown as { __never?: string[] }).__never ?? [];
         const motionTotal = document.querySelectorAll("[data-motion]").length;
+
+        /*
+         * Is the content actually on top?
+         *
+         * Everything else here asks whether an element exists, has size and
+         * has painted. All three were true of a page whose entire viewport was
+         * covered by a lazy-loaded gallery thumbnail that had escaped its
+         * container and gone `position: absolute` against the viewport: the
+         * heading was present, sized, opaque and completely invisible.
+         *
+         * So this asks the only question that catches that — what does the
+         * reader's eye actually land on? If the point at the centre of a
+         * heading belongs to some unrelated element, something is covering it.
+         */
+        const covered: string[] = [];
+        const headings = [
+          ...document.querySelectorAll<HTMLElement>("h1, h2, main p"),
+        ].slice(0, 12);
+        for (const el of headings) {
+          const rect = el.getBoundingClientRect();
+          if (rect.width < 40 || rect.height < 8) continue;
+          /*
+           * Hit-tested at the middle of the element's *visible slice*.
+           *
+           * Requiring the whole element to fit inside the viewport skipped
+           * every heading on these pages — the hero is 592px tall and starts
+           * below the fold, so nothing qualified and the rule tested nothing
+           * while reporting no problems. Verified against the live broken
+           * deployment: with this geometry it names the covering image five
+           * times, and with the old one it found nothing at all.
+           */
+          const top = Math.max(rect.top, 0);
+          const bottom = Math.min(rect.bottom, window.innerHeight);
+          if (bottom - top < 6) continue;
+          const x = Math.min(
+            Math.max(rect.left + rect.width / 2, 1),
+            window.innerWidth - 1,
+          );
+          const y = (top + bottom) / 2;
+          const hit = document.elementFromPoint(x, y);
+          if (!hit) continue;
+          if (el.contains(hit) || hit.contains(el)) continue;
+          /*
+           * Site chrome is allowed to be on top. The sticky header covering a
+           * heading that has scrolled under it is what a sticky header is for,
+           * and counting it made this rule fire on every page at once — which
+           * is how a real finding gets lost. An element that escapes its
+           * container and covers the page is `absolute` or in normal flow, not
+           * fixed, so nothing worth catching is excluded here.
+           */
+          let chrome = false;
+          for (
+            let node: Element | null = hit;
+            node;
+            node = node.parentElement
+          ) {
+            const position = getComputedStyle(node).position;
+            if (position === "fixed" || position === "sticky") {
+              chrome = true;
+              break;
+            }
+          }
+          if (chrome) continue;
+          covered.push(
+            `"${(el.innerText || "").trim().slice(0, 40)}" is behind <${hit.tagName.toLowerCase()} class="${hit.className.toString().slice(0, 50)}">`,
+          );
+        }
 
         /* A section that rendered to nothing is a section that failed. */
         const emptySections = [...document.querySelectorAll("section")]
@@ -277,6 +364,7 @@ try {
             .filter((i) => i.complete && i.naturalWidth === 0)
             .map((i) => i.getAttribute("src")?.slice(0, 60) ?? "(no src)"),
           motionTotal,
+          covered,
           h1s: document.querySelectorAll("h1").length,
           textLength: (document.body.innerText || "").length,
           docHeight: de.scrollHeight,
@@ -334,6 +422,9 @@ try {
           `${route} (${viewport.name}) — ${result.stuck.length} of ${result.motionTotal} sampled as never painted; below the threshold, and headless is unreliable here`,
         );
       }
+      for (const detail of result.covered) {
+        fail("content-covered", detail);
+      }
       for (const id of result.emptySections) {
         fail("empty-section", `<section ${id}> rendered to nothing`);
       }
@@ -341,7 +432,10 @@ try {
         fail("broken-image", src);
       }
       if (result.h1s !== 1) {
-        fail("heading-count", `${result.h1s} <h1> elements, expected exactly 1`);
+        fail(
+          "heading-count",
+          `${result.h1s} <h1> elements, expected exactly 1`,
+        );
       }
       if (result.textLength < 400) {
         fail("thin-page", `${result.textLength} characters of visible text`);

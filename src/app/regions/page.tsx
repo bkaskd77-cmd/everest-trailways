@@ -40,10 +40,11 @@ export default function RegionsIndexPage() {
           Nepal, by where you would be.
         </h1>
         <p className="mt-5 max-w-[62ch] text-base text-muted-foreground">
-          {regions.length} regions, {regions.reduce((n, r) => n + r.treks.length, 0)}{" "}
-          routes. The season is not the same in any two of them — the month
-          tables on each route say so route by route rather than offering one
-          calendar for the whole country.
+          {regions.length} regions,{" "}
+          {regions.reduce((n, r) => n + r.treks.length, 0)} routes. The season
+          is not the same in any two of them — the month tables on each route
+          say so route by route rather than offering one calendar for the whole
+          country.
         </p>
 
         <StaggerGroup as="ul" className="mt-12 grid gap-4 md:grid-cols-2">
@@ -59,7 +60,7 @@ export default function RegionsIndexPage() {
                 <p className="mt-3 flex-1 text-sm text-muted-foreground">
                   {treks.map((t) => t.name).join(", ")}.
                 </p>
-                <p className="tabular mt-5 flex items-center justify-between text-sm text-muted-foreground">
+                <p className="mt-5 flex items-center justify-between tabular text-sm text-muted-foreground">
                   <span>
                     {treks.length} {treks.length === 1 ? "route" : "routes"} ·{" "}
                     {open} {open === 1 ? "date" : "dates"} open

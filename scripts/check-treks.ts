@@ -65,20 +65,57 @@ for (const trek of TREK_PAGES) {
 
 const KNOWN_PLACES = [
   ...Object.keys(PLACES),
-  "Lukla", "Ramechhap", "Manthali", "Khumbu", "Sagarmatha", "Everest", "Salleri",
-  "Jiri", "Kala Patthar", "Annapurna", "Machhapuchhre", "Deurali", "Thorong",
-  "Mardi", "Poon Hill", "Mustang", "Kali Gandaki", "Langtang", "Dhunche", "Beni",
-  "Kande", "Nepalgunj", "Mugling", "Sundarijal", "Chitwan", "Bardia", "Karnali",
-  "Rapti", "Terai", "Shivapuri", "Nagarjun", "Bhaktapur", "Changu Narayan",
-  "Thamel", "Tharu", "Namche", "Gorakshep", "Marsyangdi", "Dudh Koshi",
-  "Modi Khola", "Gurung", "Sauraha", "Himalaya",
+  "Lukla",
+  "Ramechhap",
+  "Manthali",
+  "Khumbu",
+  "Sagarmatha",
+  "Everest",
+  "Salleri",
+  "Jiri",
+  "Kala Patthar",
+  "Annapurna",
+  "Machhapuchhre",
+  "Deurali",
+  "Thorong",
+  "Mardi",
+  "Poon Hill",
+  "Mustang",
+  "Kali Gandaki",
+  "Langtang",
+  "Dhunche",
+  "Beni",
+  "Kande",
+  "Nepalgunj",
+  "Mugling",
+  "Sundarijal",
+  "Chitwan",
+  "Bardia",
+  "Karnali",
+  "Rapti",
+  "Terai",
+  "Shivapuri",
+  "Nagarjun",
+  "Bhaktapur",
+  "Changu Narayan",
+  "Thamel",
+  "Tharu",
+  "Namche",
+  "Gorakshep",
+  "Marsyangdi",
+  "Dudh Koshi",
+  "Modi Khola",
+  "Gurung",
+  "Sauraha",
+  "Himalaya",
 ];
 
 for (const trek of TREK_PAGES) {
   const profile = TREKS[trek.id];
   const allowed = new Set<string>(TREK_NAMED_PLACES[trek.id] ?? []);
   const allow = (text: string) => {
-    for (const place of KNOWN_PLACES) if (text.includes(place)) allowed.add(place);
+    for (const place of KNOWN_PLACES)
+      if (text.includes(place)) allowed.add(place);
   };
   allow(trek.region);
   allow(trek.name);
@@ -104,7 +141,9 @@ for (const trek of TREK_PAGES) {
     ...trek.permitsRequired.map(
       (p, i) => [`permit[${i}]`, p] as [string, string],
     ),
-    ...trek.suitsYouIf.map((s, i) => [`suitsYouIf[${i}]`, s] as [string, string]),
+    ...trek.suitsYouIf.map(
+      (s, i) => [`suitsYouIf[${i}]`, s] as [string, string],
+    ),
     ...trek.notForYouIf.map(
       (s, i) => [`notForYouIf[${i}]`, s] as [string, string],
     ),
@@ -143,7 +182,11 @@ for (const trek of TREK_PAGES) {
         const others = trek.comparedTo
           .map((c) => TREK_PAGES.find((t) => t.id === c.otherTrekId))
           .filter(Boolean);
-        if (others.some((o) => cited <= (o as { maxAltitudeM: number }).maxAltitudeM + 300)) {
+        if (
+          others.some(
+            (o) => cited <= (o as { maxAltitudeM: number }).maxAltitudeM + 300,
+          )
+        ) {
           continue;
         }
       }
@@ -186,7 +229,11 @@ for (const trek of TREK_PAGES) {
   }
   for (const [i, line] of trek.notForYouIf.entries()) {
     if (line.trim().length < 30) {
-      fail(trek.id, "thin-disqualifiers", `notForYouIf[${i}] is too short to be a real one`);
+      fail(
+        trek.id,
+        "thin-disqualifiers",
+        `notForYouIf[${i}] is too short to be a real one`,
+      );
     }
   }
   /*
@@ -229,15 +276,27 @@ for (const trek of TREK_PAGES) {
   }
 
   if (trek.comparedTo.length < 2) {
-    fail(trek.id, "thin-comparisons", `${trek.comparedTo.length} comparisons, fewer than 2`);
+    fail(
+      trek.id,
+      "thin-comparisons",
+      `${trek.comparedTo.length} comparisons, fewer than 2`,
+    );
   }
   const seenOthers = new Set<string>();
   for (const [i, c] of trek.comparedTo.entries()) {
     if (!ids.has(c.otherTrekId)) {
-      fail(trek.id, "bad-comparison", `comparedTo[${i}] names "${c.otherTrekId}", which is not a trek`);
+      fail(
+        trek.id,
+        "bad-comparison",
+        `comparedTo[${i}] names "${c.otherTrekId}", which is not a trek`,
+      );
     }
     if (c.otherTrekId === trek.id) {
-      fail(trek.id, "bad-comparison", `comparedTo[${i}] compares the trek with itself`);
+      fail(
+        trek.id,
+        "bad-comparison",
+        `comparedTo[${i}] compares the trek with itself`,
+      );
     }
     if (seenOthers.has(c.otherTrekId)) {
       fail(trek.id, "bad-comparison", `compared with "${c.otherTrekId}" twice`);
@@ -257,7 +316,11 @@ for (const trek of TREK_PAGES) {
      * reason to pick this one wearing the wrong label.
      */
     const other = TREK_PAGES.find((t) => t.id === c.otherTrekId);
-    if (other && c.chooseOtherIf.includes(trek.name) && !c.chooseOtherIf.includes(other.name)) {
+    if (
+      other &&
+      c.chooseOtherIf.includes(trek.name) &&
+      !c.chooseOtherIf.includes(other.name)
+    ) {
       fail(
         trek.id,
         "one-sided-comparison",
@@ -275,7 +338,11 @@ for (const trek of TREK_PAGES) {
     }
   }
   if (trek.seasonality.length !== 12) {
-    fail(trek.id, "missing-month", `${trek.seasonality.length} entries, not 12`);
+    fail(
+      trek.id,
+      "missing-month",
+      `${trek.seasonality.length} entries, not 12`,
+    );
   }
   for (const m of trek.seasonality) {
     if (m.note.trim().length < 30) {
@@ -308,7 +375,8 @@ for (const trek of TREK_PAGES) {
     );
   }
   const [minDays, maxDays] = trek.typicalDays;
-  if (minDays > maxDays) fail(trek.id, "bad-days", `typicalDays is ${minDays}-${maxDays}`);
+  if (minDays > maxDays)
+    fail(trek.id, "bad-days", `typicalDays is ${minDays}-${maxDays}`);
 
   const dates = departures.filter((d) => d.trekId === trek.id);
   for (const d of dates) {
@@ -347,7 +415,11 @@ for (const trek of TREK_PAGES) {
   }
 
   if (!trek.permitsRequired.length) {
-    fail(trek.id, "no-permits", "no permits listed — every route in Nepal needs at least one");
+    fail(
+      trek.id,
+      "no-permits",
+      "no permits listed — every route in Nepal needs at least one",
+    );
   }
 
   /*
@@ -380,7 +452,11 @@ for (const trek of TREK_PAGES) {
       );
     }
     if (!c.decidedOn) {
-      fail(trek.id, "incoherent-archive", `${c.departure.id} has no decision date`);
+      fail(
+        trek.id,
+        "incoherent-archive",
+        `${c.departure.id} has no decision date`,
+      );
     }
   }
 }
@@ -388,7 +464,9 @@ for (const trek of TREK_PAGES) {
 /* ------------------------------------------------------------------ report */
 
 console.log("\n  Trek pages\n");
-console.log(`  ok    ${TREK_PAGES.length} treks, every departure resolves to one`);
+console.log(
+  `  ok    ${TREK_PAGES.length} treks, every departure resolves to one`,
+);
 console.log(
   `  ok    ${TREK_PAGES.reduce((n, t) => n + t.notForYouIf.length, 0)} stated disqualifiers, ${TREK_PAGES.reduce((n, t) => n + t.comparedTo.length, 0)} two-sided comparisons`,
 );

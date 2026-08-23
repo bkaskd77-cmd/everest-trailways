@@ -176,11 +176,7 @@ export default async function TrekPage({
                 // to share a `capitalize` with the rest of the row, which
                 // rendered the unit as "3,210 M" and the count as "1 Of 2".
                 ["Difficulty", trek.difficulty, true],
-                [
-                  "Dates open",
-                  `${open.length} of ${all.length}`,
-                  false,
-                ],
+                ["Dates open", `${open.length} of ${all.length}`, false],
               ] as [string, string, boolean][]
             ).map(([label, value, capitalise]) => (
               <div key={label}>
@@ -198,7 +194,10 @@ export default async function TrekPage({
 
       <main className="bg-band-sunk">
         {/* 2 — SUMMARY AND ROUTE */}
-        <section aria-labelledby="about-heading" className="shell py-16 lg:py-20">
+        <section
+          aria-labelledby="about-heading"
+          className="shell py-16 lg:py-20"
+        >
           <h2 id="about-heading" className="sr-only">
             About {trek.name}
           </h2>
@@ -317,9 +316,9 @@ export default async function TrekPage({
             >
               <p>
                 Rated for this route rather than for Nepal in general — the same
-                month is a different proposition at {trek.maxAltitudeM.toLocaleString("en-GB")} m
-                than it is in the hills. Twelve months, including the ones we
-                tell people to skip.
+                month is a different proposition at{" "}
+                {trek.maxAltitudeM.toLocaleString("en-GB")} m than it is in the
+                hills. Twelve months, including the ones we tell people to skip.
               </p>
             </SectionHead>
 
@@ -433,7 +432,7 @@ export default async function TrekPage({
                         className="group grid gap-3 rounded-lg border border-border bg-card p-5 transition-colors hover:border-foreground/25 sm:grid-cols-[1fr_auto] sm:items-center"
                       >
                         <div>
-                          <p className="tabular font-display text-lg tracking-tight">
+                          <p className="font-display tabular text-lg tracking-tight">
                             {formatDateRange(d.departsOn, d.returnsOn)}
                           </p>
                           <p className="mt-1 text-sm text-muted-foreground">
@@ -445,7 +444,7 @@ export default async function TrekPage({
                               : `${d.minimumToRun} needed to run, decided ${formatDate(d.decisionDate)}`}
                           </p>
                         </div>
-                        <p className="tabular flex items-center gap-2 text-lg sm:justify-end">
+                        <p className="flex items-center gap-2 tabular text-lg sm:justify-end">
                           ${d.priceUSD.toLocaleString("en-GB")}
                           <ArrowRight
                             aria-hidden
@@ -489,7 +488,7 @@ export default async function TrekPage({
                   <Reveal as="li" key={c.departure.id}>
                     <div className="grid gap-2 rounded-lg border border-border bg-card p-5 sm:grid-cols-[1fr_auto] sm:items-baseline">
                       <div>
-                        <p className="tabular font-display text-lg tracking-tight">
+                        <p className="font-display tabular text-lg tracking-tight">
                           {formatDateRange(
                             c.departure.departsOn,
                             c.departure.returnsOn,

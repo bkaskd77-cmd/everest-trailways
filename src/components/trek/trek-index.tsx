@@ -30,7 +30,7 @@ export type TrekCard = {
 };
 
 const DAYS = [
-  { id: "any-days", label: "Any length", test: (c: TrekCard) => true },
+  { id: "any-days", label: "Any length", test: () => true },
   {
     id: "short",
     label: "A week or less",
@@ -50,7 +50,7 @@ const DAYS = [
 ];
 
 const DIFFICULTY = [
-  { id: "any-difficulty", label: "Any", test: (c: TrekCard) => true },
+  { id: "any-difficulty", label: "Any", test: () => true },
   {
     id: "moderate",
     label: "Moderate",
@@ -100,7 +100,7 @@ function FilterRow({
           >
             {option.label}
             {typeof option.count === "number" && (
-              <span className="tabular ml-1.5 text-xs opacity-60">
+              <span className="ml-1.5 tabular text-xs opacity-60">
                 {option.count}
               </span>
             )}
@@ -242,7 +242,7 @@ export function TrekIndex({ cards }: { cards: TrekCard[] }) {
                     <dt className="text-xs tracking-[0.12em] text-muted-foreground uppercase">
                       Days
                     </dt>
-                    <dd className="tabular mt-1">
+                    <dd className="mt-1 tabular">
                       {c.trek.typicalDays[0] === c.trek.typicalDays[1]
                         ? c.trek.typicalDays[0]
                         : `${c.trek.typicalDays[0]}–${c.trek.typicalDays[1]}`}
@@ -252,7 +252,7 @@ export function TrekIndex({ cards }: { cards: TrekCard[] }) {
                     <dt className="text-xs tracking-[0.12em] text-muted-foreground uppercase">
                       Highest point
                     </dt>
-                    <dd className="tabular mt-1">
+                    <dd className="mt-1 tabular">
                       {c.trek.maxAltitudeM.toLocaleString("en-GB")} m
                     </dd>
                   </div>
@@ -266,7 +266,7 @@ export function TrekIndex({ cards }: { cards: TrekCard[] }) {
                     <dt className="text-xs tracking-[0.12em] text-muted-foreground uppercase">
                       From
                     </dt>
-                    <dd className="tabular mt-1">
+                    <dd className="mt-1 tabular">
                       {c.priceFrom
                         ? `$${c.priceFrom.toLocaleString("en-GB")}`
                         : "—"}
