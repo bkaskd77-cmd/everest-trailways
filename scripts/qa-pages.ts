@@ -121,29 +121,50 @@ async function waitForServer(port: number, timeoutMs = 60_000): Promise<void> {
   throw new Error(`the production server never answered on ${port}`);
 }
 
-if (!existsSync(path.join(root, ".next", "BUILD_ID"))) {
+/**
+ * Where to point it.
+ *
+ *     pnpm qa                        the local production build
+ *     pnpm qa -- --base https://...  a deployment
+ *
+ * The deployed site is the one people actually get, and it is not the same
+ * artefact as a local build: a different CDN, different cache headers, and a
+ * commit that may not be the one in the working tree. Checking only localhost
+ * means never checking the thing that is live.
+ */
+const baseArg = process.argv.find((a) => a.startsWith("--base="));
+const baseIndex = process.argv.indexOf("--base");
+const BASE =
+  (baseArg && baseArg.slice("--base=".length)) ||
+  (baseIndex > -1 ? process.argv[baseIndex + 1] : "") ||
+  "";
+const remote = Boolean(BASE);
+
+if (!remote && !existsSync(path.join(root, ".next", "BUILD_ID"))) {
   console.error(
     "\n  No production build found. Run `pnpm build` first — `next dev` renders differently and would make this lie.\n",
   );
   process.exit(1);
 }
 
-const port = await freePort();
+const port = remote ? 0 : await freePort();
 let server: ChildProcess | null = null;
 let browser: Browser | null = null;
+const origin = remote ? BASE.replace(/[/]$/, "") : `http://127.0.0.1:${port}`;
 
 try {
-  server = spawn(
-    process.execPath,
-    [
-      path.join(root, "node_modules", "next", "dist", "bin", "next"),
-      "start",
-      "--port",
-      String(port),
-    ],
-    { cwd: root, stdio: "ignore" },
-  );
-  await waitForServer(port);
+  if (!remote)
+    server = spawn(
+      process.execPath,
+      [
+        path.join(root, "node_modules", "next", "dist", "bin", "next"),
+        "start",
+        "--port",
+        String(port),
+      ],
+      { cwd: root, stdio: "ignore" },
+    );
+  if (!remote) await waitForServer(port);
 
   browser = await puppeteer.launch({
     headless: true,
@@ -151,7 +172,7 @@ try {
   });
 
   console.log(
-    `\n  QA — ${ROUTES.length} routes × ${VIEWPORTS.length} widths, production build on port ${port}\n`,
+    `\n  QA — ${ROUTES.length} routes × ${VIEWPORTS.length} widths against ${origin}\n`,
   );
 
   for (const route of ROUTES) {
@@ -187,7 +208,7 @@ try {
       const fail = (rule: string, detail: string) =>
         findings.push({ route, viewport: viewport.name, rule, detail });
 
-      const response = await page.goto(`http://127.0.0.1:${port}${route}`, {
+      const response = await page.goto(`${origin}${route}`, {
         waitUntil: "networkidle2",
         timeout: 45_000,
       });

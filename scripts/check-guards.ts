@@ -208,7 +208,10 @@ const MUTATIONS: Mutation[] = [
     name: "a twelve-month table with a month missing",
     guard: "check-treks.ts",
     file: "src/content/trek-pages.ts",
-    break: (s) => s.replace(/\[1, "avoid", /, '[13, "avoid", '),
+    // Formatting-agnostic: Prettier moved the rating onto its own line and a
+    // literal " " between the fields stopped matching anything.
+    break: (s) =>
+      s.replace(/\[\s*1,\s*"(best|good|possible|avoid)"/, '[13, "$1"'),
     expect: "missing-month",
   },
   {
@@ -257,34 +260,21 @@ const MUTATIONS: Mutation[] = [
     expect: "missing-from-archive",
   },
   {
-    name: "the same photograph in the header and the grid",
-    guard: "check-departures.ts",
-    file: "src/content/trek-detail.ts",
     /*
-     * Aimed at the exclusion, not at the category list.
-     *
-     * Adding a category to HEADER_CATEGORIES used to create the overlap. It
-     * stopped once `gridImages` began subtracting whatever the header holds —
-     * the category simply moved sides. The only way to get an image onto both
-     * halves now is to remove that subtraction, which is exactly the line
-     * worth guarding: it is what keeps a promoted photograph from appearing
-     * twice on the page.
+     * The wider of the two photography faults, and the one that shipped on
+     * twelve of nineteen pages: not an empty hero, but a hero that opens on
+     * the gap and shows the photograph seven seconds later when the carousel
+     * advances. Reversing the order is exactly how it happened.
      */
-    break: (s) => s.replace(/\s*!header\.includes\(g\) &&/, ""),
-    expect: "gallery-both-sides",
-  },
-  {
-    // The bug this pair exists for: every slot filled, no photograph in any of
-    // them, and a hero that looks like a broken page.
-    name: "a hero slider of nothing but placeholders",
+    name: "a slider that opens on a placeholder",
     guard: "check-departures.ts",
     file: "src/content/trek-detail.ts",
     break: (s) =>
       s.replace(
-        "  if (preferred.some((g) => g.src)) return preferred;",
-        "  return preferred;",
+        /\.\.\.gallery\.filter\(\(g\) => g\.src\),(\s+)\.\.\.gallery\.filter\(\(g\) => !g\.src\),/,
+        "...gallery.filter((g) => !g.src),$1...gallery.filter((g) => g.src),",
       ),
-    expect: "all-placeholder-half",
+    expect: "hero-without-photograph",
   },
   {
     name: "a trek page with no photograph to open on",
@@ -293,17 +283,6 @@ const MUTATIONS: Mutation[] = [
     // Every image becomes a pending slot, so no trek has anything to borrow.
     break: (s) => s.replace(/^(\s*)src:/gm, "$1pendingSrc:"),
     expect: "no-hero-photograph",
-  },
-  {
-    name: "a gallery category that renders in neither half",
-    guard: "check-departures.ts",
-    file: "src/content/trek-detail.ts",
-    break: (s) =>
-      s.replace(
-        'export const HEADER_CATEGORIES = ["landscape", "trail"] as const;',
-        'export const HEADER_CATEGORIES = ["landscape"] as const;',
-      ),
-    expect: "gallery-orphan",
   },
 ];
 
@@ -401,7 +380,6 @@ for (const rule of [
   "thin-disqualifiers",
   "incoherent-archive",
   "no-permits",
-  "gallery-empty-half",
   "gallery-missing-basics",
   "gallery-thin-caption",
   "gallery-no-alt",

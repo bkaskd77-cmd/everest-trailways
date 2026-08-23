@@ -13,8 +13,7 @@ import {
   departureStatus,
   departures,
   formatDate,
-  gridImages,
-  headerImages,
+  heroImages,
   isBookable,
   isIndexable,
   lifecycle,
@@ -47,10 +46,11 @@ import { trekForDeparture } from "@/lib/treks";
  * scroll either way.
  *
  * So the wrappers are gone from the server components, where they were pure
- * indirection with a comment claiming a benefit they did not deliver. What is
- * genuinely deferred is inside the gallery: the lightbox, its focus trap and
- * its keyboard handling load on the first click and not before, because until
- * somebody opens an image none of that code can run.
+ * indirection with a comment claiming a benefit they did not deliver. Nothing
+ * on this page is deferred now: the one thing that honestly could be was the
+ * gallery lightbox, and the gallery it belonged to is gone — every photograph
+ * lives in the header slider, which renders immediately because it is the
+ * first thing on the page.
  *
  * The prose is prerendered into the HTML in every case, which is the property
  * that actually matters for this page — a crawler and an assistant read the
@@ -59,7 +59,6 @@ import { trekForDeparture } from "@/lib/treks";
 import { FaqAccordion } from "@/components/departure/faq-section";
 import { OtherDates } from "@/components/departure/other-dates";
 import { PracticalitiesSection } from "@/components/departure/practicalities";
-import { GalleryGrid } from "@/components/departure/gallery-grid";
 import {
   DepartureHeroSlider,
   HeroBreadcrumb,
@@ -208,7 +207,7 @@ export default async function DeparturePage({
              operators lead with a summit; this leads with the room and the
              plate, which is what somebody is actually buying. */}
       <DepartureHeroSlider
-        images={headerImages(departure.gallery)}
+        images={heroImages(departure.gallery)}
         region={departure.region}
         trekName={departure.trekName}
       >
@@ -517,34 +516,11 @@ export default async function DeparturePage({
           </div>
         </section>
 
-        {/* 7 — PRACTICAL DETAIL, and the photographs of it.
-               The grid sits directly under the practicalities rather than
-               floating as its own band, because it is the same claim twice:
-               the paragraph says the room is unheated and the photograph is
-               the room. Split from the header pool — the slider has the view,
-               this has the trip. Nothing appears in both. */}
+        {/* 7 — PRACTICAL DETAIL.
+               The photographs that used to sit under this in a grid are back
+               in the header slider. One image system on the page, at the top,
+               where somebody is already looking. */}
         <PracticalitiesSection practicalities={departure.practicalities} />
-
-        <section
-          aria-labelledby="gallery-heading"
-          className="border-t border-border"
-        >
-          <div className="shell py-16 lg:py-20">
-            <SectionHead
-              eyebrow="What it looks like"
-              id="gallery-heading"
-              title="The room, the plate and the road."
-            >
-              <p>
-                Not the view — that is at the top of this page. These are the
-                parts of a trip most galleries leave out, which is the reason
-                they are the ones worth publishing.
-              </p>
-            </SectionHead>
-
-            <GalleryGrid images={gridImages(departure.gallery)} />
-          </div>
-        </section>
 
         {/* 8 — COST SHEET, and everything that hangs off it */}
         <CostSheetSection departure={departure} />

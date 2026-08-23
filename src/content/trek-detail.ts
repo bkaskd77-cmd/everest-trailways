@@ -211,66 +211,33 @@ const STUPA_RIDGE: GalleryImage = {
 };
 
 /**
- * The gallery is split in two, and no photograph appears on both sides.
+ * Every photograph on a departure, in the order the header shows them.
  *
- * The header slider is the mountain: the view and the trail. The grid below is
- * the trip: the room, the plate, the jeep and the people. They were one pool
- * fed to two components, which meant the same teahouse room could be both the
- * hero of the page and a thumbnail four sections later — and it read as a
- * shortage of photographs rather than a decision.
+ * There is one image system on this page and it is the header slider. The
+ * gallery was split in two for a while — the view up top, the room and the
+ * plate in a grid below — and the grid was removed again because a second
+ * image block below the fold reads as a feature the page did not need. The
+ * split also cost more than it bought: with photography still thin it left
+ * three headers with nothing real in them and three grids with nothing at all.
  *
- * The split is by category and it is exhaustive: every category belongs to
- * exactly one side, so a new one cannot quietly land in neither. The guard
- * checks the partition rather than trusting this comment.
+ * Photographs first, pending slots after, order otherwise preserved.
+ *
+ * Twelve of the nineteen departures opened on a grey "photograph pending"
+ * panel, because the pending slots came first in the gallery and the slider
+ * renders the array as given. The real photograph arrived seven seconds later
+ * when the carousel advanced, so the first thing anybody saw on most of the
+ * site was a blank rectangle that then slid away. Every guard was green: the
+ * slot was filled, the page had painted. It simply led with the gap.
+ *
+ * This hides nothing. Every pending slot is still in the slider, still
+ * captioned, still counted by the dots — it only stops the page opening on the
+ * one frame with no picture in it, and it puts a real image in the `priority`
+ * slot the loader preloads.
  */
-export const HEADER_CATEGORIES = ["landscape", "trail"] as const;
-
-export const GRID_CATEGORIES = [
-  "accommodation",
-  "food",
-  "transport",
-  "people",
-] as const;
-
-/**
- * The header half, with one rule that outranks the split.
- *
- * A hero of nothing but grey panels is a broken-looking page, and the split
- * shipped three of them: Bardia, Chitwan and Upper Mustang hold their only
- * verified photograph in a grid category, so restricting the slider to
- * landscape and trail left their headers with no photograph at all. Before the
- * split the slider drew on the whole pool and always had something real.
- *
- * So when the preferred half has no photograph in it, one is promoted from the
- * other half. It leaves the grid when it does, which keeps the two sides a
- * partition and keeps the no-duplication rule intact — the promoted image
- * still appears exactly once on the page.
- *
- * This is a fallback for missing photography, not a category. When the real
- * photographs arrive the preferred half will have one and the promotion stops
- * happening on its own.
- */
-export const headerImages = (gallery: GalleryImage[]): GalleryImage[] => {
-  const preferred = gallery.filter((g) =>
-    (HEADER_CATEGORIES as readonly string[]).includes(g.category),
-  );
-  if (preferred.some((g) => g.src)) return preferred;
-
-  const promoted = gallery.find(
-    (g) =>
-      g.src && !(HEADER_CATEGORIES as readonly string[]).includes(g.category),
-  );
-  return promoted ? [promoted, ...preferred] : preferred;
-};
-
-export const gridImages = (gallery: GalleryImage[]): GalleryImage[] => {
-  const header = headerImages(gallery);
-  return gallery.filter(
-    (g) =>
-      !header.includes(g) &&
-      (GRID_CATEGORIES as readonly string[]).includes(g.category),
-  );
-};
+export const heroImages = (gallery: GalleryImage[]): GalleryImage[] => [
+  ...gallery.filter((g) => g.src),
+  ...gallery.filter((g) => !g.src),
+];
 
 export const GALLERIES: Record<string, GalleryImage[]> = {
   "everest-base-camp": [

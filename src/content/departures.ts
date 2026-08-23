@@ -20,12 +20,7 @@ import {
 
 export type { Contingency, CostLine, CostSheet };
 export type { Faq, GalleryImage, Practicalities };
-export {
-  GRID_CATEGORIES,
-  HEADER_CATEGORIES,
-  gridImages,
-  headerImages,
-} from "./trek-detail.ts";
+export { heroImages } from "./trek-detail.ts";
 export { PLACES, type LatLon } from "./places.ts";
 export {
   RETURN_POINTS,

@@ -34,8 +34,7 @@ import {
   seatsRemaining,
   type Departure,
   type DepartureStatus,
-  gridImages,
-  headerImages,
+  heroImages,
 } from "../src/content/departures.ts";
 
 type Problem = { id: string; rule: string; detail: string };
@@ -692,87 +691,34 @@ for (const d of departures) {
     }
   }
   /*
-   * The two halves of the gallery, and the line between them.
+   * The slider must open on a photograph.
    *
-   * The header slider shows the mountain, the grid below shows the trip, and
-   * nothing appears in both — otherwise the same teahouse room is the hero of
-   * the page and a thumbnail four sections later, which reads as a shortage of
-   * photographs rather than as a decision.
+   * Two separate faults sat behind this rule, both of which shipped green.
    *
-   * The partition is checked rather than the two lists: a category that
-   * belongs to neither side is an image that silently stops being rendered
-   * anywhere, and that is the failure a "no overlap" check on its own misses.
-   */
-  const header = headerImages(d.gallery);
-  const grid = gridImages(d.gallery);
-
-  for (const image of d.gallery) {
-    const inHeader = header.includes(image);
-    const inGrid = grid.includes(image);
-    if (inHeader && inGrid) {
-      fail(
-        id,
-        "gallery-both-sides",
-        `"${image.caption}" is in the slider and the grid`,
-      );
-    }
-    if (!inHeader && !inGrid) {
-      fail(
-        id,
-        "gallery-orphan",
-        `"${image.caption}" is category "${image.category}", which is in neither half, so it renders nowhere`,
-      );
-    }
-  }
-  if (!header.length) {
-    fail(id, "gallery-empty-half", "the header slider has no images");
-  }
-  if (!grid.length) {
-    fail(id, "gallery-empty-half", "the gallery grid has no images");
-  }
-
-  /*
-   * A half made entirely of placeholders.
+   * The first: a category split moved the only verified image out of the
+   * header, leaving three departures whose hero was nothing but grey panels.
+   * The second, subtler and wider: the pending slots came first in the array,
+   * so twelve of nineteen pages opened on a blank rectangle and only showed a
+   * photograph seven seconds later when the carousel advanced.
    *
-   * The rule above counts images and this one counts photographs, and the
-   * difference is the whole bug. The category split shipped three departures
-   * whose header slider was three grey panels and nothing else — every slot
-   * filled, every guard green, and a page that looked broken to anyone who
-   * opened it. `headerImages` now promotes a photograph into an empty header;
-   * this fails if that ever stops working.
-   *
-   * Only enforced where the pool has a photograph to give. A trek with no
-   * verified photography at all is an honest gap and is reported separately,
-   * not failed — the placeholder panel exists precisely so that gap can be
-   * shown rather than filled with something plausible.
+   * Both were invisible to a check that counted images, because the count was
+   * right in each case. This counts photographs and it checks the first frame,
+   * which is the one a reader actually sees.
    */
   const photographs = d.gallery.filter((image) => image.src).length;
 
-  /*
-   * The header comes first when there is only one photograph to go round.
-   *
-   * With a single verified photograph and two sections, one of them is going
-   * to be all placeholders, and it should not be the hero: the hero is
-   * full-bleed and above the fold, where a grey panel reads as a broken page.
-   * The same panel among small thumbnails reads as what it is, a photograph
-   * not taken yet.
-   *
-   * So the header is owed a photograph as soon as there is one, and the grid
-   * as soon as there are two. Written as a threshold rather than a special
-   * case, because that is what it is.
-   */
-  if (photographs >= 1 && !header.some((image) => image.src)) {
+  if (photographs >= 1 && !d.gallery.some((image) => image.src)) {
     fail(
       id,
-      "all-placeholder-half",
-      `the header slider is ${header.length} placeholder${header.length === 1 ? "" : "s"} and no photograph, and the gallery holds ${photographs}`,
+      "hero-without-photograph",
+      "the slider holds no photograph at all",
     );
   }
-  if (photographs >= 2 && grid.length && !grid.some((image) => image.src)) {
+  if (photographs >= 1 && !heroImages(d.gallery)[0]?.src) {
     fail(
       id,
-      "all-placeholder-half",
-      `the gallery grid is ${grid.length} placeholder${grid.length === 1 ? "" : "s"} and no photograph, and the gallery holds ${photographs}`,
+      "hero-without-photograph",
+      `the first slide is a pending placeholder while the gallery holds ${photographs} photograph${photographs === 1 ? "" : "s"}`,
     );
   }
 
