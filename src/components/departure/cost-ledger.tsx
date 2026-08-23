@@ -6,7 +6,7 @@ import * as m from "motion/react-m";
 import { ChevronDown } from "lucide-react";
 
 import { DURATION, EASE, REVEAL_VIEWPORT } from "@/lib/motion";
-import type { CostLine } from "@/content/departures";
+import { type CostLine, lineAmount, lineVaries } from "@/content/departures";
 import { cn } from "@/lib/utils";
 
 /**
@@ -47,7 +47,7 @@ const CATEGORY_ORDER: CostLine["category"][] = [
   "admin",
 ];
 
-const BASIS_LABEL: Record<CostLine["basis"], string> = {
+const BASIS_LABEL: Record<NonNullable<CostLine["basis"]>, string> = {
   "per-person": "per person",
   "per-group": "per group, divided",
   "per-day": "per day",
@@ -67,7 +67,8 @@ function derivation(line: CostLine): string {
   const { unitAmountUSD, unitCount, unitLabel, dividedBy } = line;
 
   if (unitAmountUSD === undefined || unitCount === undefined) {
-    return BASIS_LABEL[line.basis];
+    /* A not-provided line has no basis: it is an estimate, not a charge. */
+    return line.basis ? BASIS_LABEL[line.basis] : "estimate";
   }
 
   const unit =
@@ -133,10 +134,10 @@ function Row({
         {derivation(line)}
       </td>
       <td className="py-3 text-right align-top tabular text-sm whitespace-nowrap">
-        {total === 0 ? (
+        {lineVaries(line) || total === 0 ? (
           <span className="text-muted-foreground">varies</span>
         ) : (
-          money(line.amountUSD)
+          money(lineAmount(line))
         )}
       </td>
     </m.tr>
@@ -152,9 +153,9 @@ function Row({
  * category was free, which is the opposite of what it means.
  */
 function subtotalLabel(lines: CostLine[]): string {
-  const total = lines.reduce((sum, l) => sum + l.amountUSD, 0);
+  const total = lines.reduce((sum, l) => sum + lineAmount(l), 0);
   if (total > 0) return money(total);
-  return lines.every((l) => l.amountUSD === 0) ? "varies" : money(total);
+  return lines.every((l) => lineAmount(l) === 0) ? "varies" : money(total);
 }
 
 function CategoryBlock({
@@ -212,7 +213,7 @@ function CategoryBlock({
               key={line.id}
               line={line}
               index={startIndex + i}
-              total={line.amountUSD}
+              total={lineAmount(line)}
             />
           ))}
       </AnimatePresence>

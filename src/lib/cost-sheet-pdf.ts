@@ -1,5 +1,11 @@
 import type { Departure } from "../content/departures.ts";
-import { formatDateRange } from "../content/departures.ts";
+import {
+  formatDateRange,
+  lineAmount,
+  payableOnArrival,
+  notProvidedLines,
+  providedLines,
+} from "../content/departures.ts";
 import { A4, PdfDocument, textWidth, wrap } from "./pdf.ts";
 import { siteConfig } from "./site.ts";
 
@@ -74,9 +80,9 @@ export function costSheetPdf(
   generatedAt: Date,
 ): Uint8Array {
   const doc = new PdfDocument(A4);
-  const included = departure.costSheet.lines.filter((l) => l.included);
-  const excluded = departure.costSheet.lines.filter((l) => !l.included);
-  const total = included.reduce((sum, l) => sum + l.amountUSD, 0);
+  const included = providedLines(departure.costSheet);
+  const excluded = notProvidedLines(departure.costSheet);
+  const total = included.reduce((sum, l) => sum + lineAmount(l), 0);
 
   let y = A4.height - M.top;
 
@@ -140,7 +146,7 @@ export function costSheetPdf(
     const lines = included.filter((l) => l.category === category);
     if (!lines.length) continue;
 
-    const subtotal = lines.reduce((sum, l) => sum + l.amountUSD, 0);
+    const subtotal = lines.reduce((sum, l) => sum + lineAmount(l), 0);
 
     space(40);
     doc.text(CATEGORY_LABEL[category].toUpperCase(), M.left, y, {
@@ -167,7 +173,7 @@ export function costSheetPdf(
       for (const [i, text] of labelLines.entries()) {
         doc.text(text, M.left, y, { size: 9.5 });
         if (i === 0) {
-          doc.textRight(money(line.amountUSD), amountX, y, {
+          doc.textRight(money(lineAmount(line)), amountX, y, {
             size: 9.5,
             face: "bold",
           });
@@ -197,10 +203,27 @@ export function costSheetPdf(
   doc.textRight(money(total), amountX, y, { size: 15, face: "bold" });
   y -= 16;
 
-  doc.text("There is nothing to pay on arrival.", M.left, y, {
-    size: 8,
-    grey: 0.4,
-  });
+  /*
+   * Composed, like the page and the FAQ, from the same line state.
+   *
+   * The PDF is the copy people forward and print, so a stale claim lives
+   * longest here. It said "nothing to pay on arrival" as a fixed string, which
+   * would have survived any number of lines moving to not-provided.
+   */
+  const arrival = payableOnArrival(departure.costSheet);
+  const arrivalTotal = arrival.reduce((sum, l) => sum + lineAmount(l), 0);
+  doc.text(
+    arrival.length === 0
+      ? "There is nothing to pay on arrival."
+      : `Payable on arrival, to others and not to us: ${arrival
+          .map((l) => l.label)
+          .join(
+            ", ",
+          )}${arrivalTotal > 0 ? `, roughly ${money(arrivalTotal)}` : ""}.`,
+    M.left,
+    y,
+    { size: 8, grey: 0.4 },
+  );
   y -= 10;
 
   if (departure.costSheet.lines.some((l) => l.dividedBy !== undefined)) {
@@ -266,7 +289,7 @@ export function costSheetPdf(
       doc.text(text, M.left, y, { size: 9.5 });
       if (i === 0) {
         doc.textRight(
-          line.amountUSD > 0 ? `${money(line.amountUSD)} est.` : "varies",
+          lineAmount(line) > 0 ? `${money(lineAmount(line))} est.` : "varies",
           amountX,
           y,
           { size: 9.5, grey: 0.35 },
@@ -401,6 +424,6 @@ export function costSheetPdf(
 /** The figure the page must agree with. Used by the guard and by the route. */
 export function pdfLedgerTotal(departure: Departure): number {
   return departure.costSheet.lines
-    .filter((l) => l.included)
-    .reduce((sum, l) => sum + l.amountUSD, 0);
+    .filter((l) => l.disposition === "provided")
+    .reduce((sum, l) => sum + lineAmount(l), 0);
 }

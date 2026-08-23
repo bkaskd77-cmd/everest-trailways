@@ -1,10 +1,17 @@
 import {
   buildCostSheet,
+  sheetPrice,
   type Contingency,
   type CostLine,
   type CostSheet,
 } from "./cost-sheets.ts";
 import { TREKS, type ItineraryDay, type PhysicalDemand } from "./treks.ts";
+import { trekById } from "./trek-pages.ts";
+import {
+  ASSIGNED_GUIDES,
+  type GuideRequirement,
+  guideRequirement,
+} from "./certification.ts";
 import type { Focal } from "../lib/image-slots.ts";
 import {
   GALLERIES,
@@ -19,6 +26,18 @@ import {
 } from "./trek-detail.ts";
 
 export type { Contingency, CostLine, CostSheet };
+export type { Disposition, PayableWhen } from "./cost-sheets.ts";
+export {
+  estimableExtras,
+  lineAmount,
+  lineVaries,
+  notProvidedLines,
+  optionalLines,
+  payableOnArrival,
+  providedLines,
+  retiredLines,
+  sheetPrice,
+} from "./cost-sheets.ts";
 export type { Faq, GalleryImage, Practicalities };
 export { heroImages } from "./trek-detail.ts";
 export { PLACES, type LatLon } from "./places.ts";
@@ -101,6 +120,12 @@ export type Departure = {
   /** ISO date by which run / no-run is decided, always before departsOn. */
   decisionDate: string;
   guideRatio: string;
+  /**
+   * Derived from `maxAltitudeM` against the certification tiers in force on
+   * the departure date. Never stored, so a change of regulation reaches every
+   * departure at once.
+   */
+  guideRequirement: GuideRequirement;
   /** Altitude in metres above which a second guide joins the group. */
   assistantGuideAbove?: number;
   /** All-in, per person, what a solo traveller is actually charged. */
@@ -158,7 +183,12 @@ type Seed = {
   seatsBooked: number;
   minimumToRun: number;
   guaranteedAt?: string;
-  priceUSD: number;
+  /**
+   * What the company keeps. The published price is the sum of the provided
+   * cost lines, of which this is one — so a line leaving the price takes its
+   * money with it instead of quietly inflating this.
+   */
+  feeUSD: number;
   singleSupplementUSD: number;
   priceIncludes: string[];
   priceExcludes: string[];
@@ -209,7 +239,7 @@ const SEEDS: Seed[] = [
     seatsBooked: 9,
     minimumToRun: 5,
     guaranteedAt: "2026-07-14",
-    priceUSD: 540,
+    feeUSD: 124,
     singleSupplementUSD: 90,
     priceIncludes: [
       "Shivapuri National Park entry and valley permits",
@@ -232,7 +262,7 @@ const SEEDS: Seed[] = [
     seatsTotal: 12,
     seatsBooked: 3,
     minimumToRun: 5,
-    priceUSD: 690,
+    feeUSD: 137,
     singleSupplementUSD: 0,
     priceIncludes: [
       "ACAP permit and TIMS card",
@@ -254,7 +284,7 @@ const SEEDS: Seed[] = [
     seatsBooked: 8,
     minimumToRun: 4,
     guaranteedAt: "2026-06-20",
-    priceUSD: 860,
+    feeUSD: 115,
     singleSupplementUSD: 0,
     priceIncludes: [
       "ACAP permit and TIMS card",
@@ -278,7 +308,7 @@ const SEEDS: Seed[] = [
     seatsBooked: 7,
     minimumToRun: 4,
     guaranteedAt: "2026-06-02",
-    priceUSD: 1890,
+    feeUSD: 102,
     singleSupplementUSD: 0,
     priceIncludes: [
       ...PERMITS_HIGH,
@@ -303,7 +333,7 @@ const SEEDS: Seed[] = [
     seatsBooked: 4,
     minimumToRun: 4,
     guaranteedAt: "2026-08-01",
-    priceUSD: 1320,
+    feeUSD: 119,
     singleSupplementUSD: 210,
     priceIncludes: [
       "Bardia National Park permits and ranger fees",
@@ -326,7 +356,7 @@ const SEEDS: Seed[] = [
     seatsBooked: 10,
     minimumToRun: 4,
     guaranteedAt: "2026-05-19",
-    priceUSD: 1240,
+    feeUSD: 304,
     singleSupplementUSD: 0,
     priceIncludes: [
       "ACAP permit and TIMS card",
@@ -350,7 +380,7 @@ const SEEDS: Seed[] = [
     seatsTotal: 8,
     seatsBooked: 2,
     minimumToRun: 4,
-    priceUSD: 1320,
+    feeUSD: 119,
     singleSupplementUSD: 210,
     priceIncludes: [
       "Bardia National Park permits and ranger fees",
@@ -369,7 +399,7 @@ const SEEDS: Seed[] = [
     seatsTotal: 10,
     seatsBooked: 3,
     minimumToRun: 4,
-    priceUSD: 980,
+    feeUSD: 242,
     singleSupplementUSD: 0,
     priceIncludes: [
       "Langtang National Park permit and TIMS card",
@@ -392,7 +422,7 @@ const SEEDS: Seed[] = [
     seatsBooked: 6,
     minimumToRun: 5,
     guaranteedAt: "2026-08-10",
-    priceUSD: 690,
+    feeUSD: 137,
     singleSupplementUSD: 0,
     priceIncludes: [
       "ACAP permit and TIMS card",
@@ -415,7 +445,7 @@ const SEEDS: Seed[] = [
     seatsBooked: 12,
     minimumToRun: 5,
     guaranteedAt: "2026-07-30",
-    priceUSD: 540,
+    feeUSD: 124,
     singleSupplementUSD: 90,
     priceIncludes: [
       "Shivapuri National Park entry and valley permits",
@@ -439,7 +469,7 @@ const SEEDS: Seed[] = [
     seatsBooked: 7,
     minimumToRun: 4,
     guaranteedAt: "2026-08-12",
-    priceUSD: 830,
+    feeUSD: 87,
     singleSupplementUSD: 145,
     priceIncludes: [
       "National park permits and naturalist guide fees",
@@ -463,7 +493,7 @@ const SEEDS: Seed[] = [
     seatsBooked: 6,
     minimumToRun: 4,
     guaranteedAt: "2026-08-05",
-    priceUSD: 1320,
+    feeUSD: 119,
     singleSupplementUSD: 210,
     priceIncludes: [
       "Bardia National Park permits and ranger fees",
@@ -487,7 +517,7 @@ const SEEDS: Seed[] = [
     seatsBooked: 5,
     minimumToRun: 4,
     guaranteedAt: "2026-09-30",
-    priceUSD: 830,
+    feeUSD: 87,
     singleSupplementUSD: 145,
     priceIncludes: [
       "National park permits and naturalist guide fees",
@@ -510,7 +540,7 @@ const SEEDS: Seed[] = [
     seatsTotal: 14,
     seatsBooked: 3,
     minimumToRun: 5,
-    priceUSD: 560,
+    feeUSD: 144,
     singleSupplementUSD: 90,
     priceIncludes: [
       "Shivapuri National Park entry and valley permits",
@@ -531,7 +561,7 @@ const SEEDS: Seed[] = [
     seatsTotal: 12,
     seatsBooked: 2,
     minimumToRun: 4,
-    priceUSD: 1675,
+    feeUSD: 292,
     singleSupplementUSD: 0,
     priceIncludes: [
       "ACAP permit and TIMS card",
@@ -558,7 +588,7 @@ const SEEDS: Seed[] = [
     seatsBooked: 5,
     minimumToRun: 4,
     guaranteedAt: "2026-08-15",
-    priceUSD: 1890,
+    feeUSD: 102,
     singleSupplementUSD: 0,
     priceIncludes: [
       ...PERMITS_HIGH,
@@ -581,7 +611,7 @@ const SEEDS: Seed[] = [
     seatsTotal: 10,
     seatsBooked: 1,
     minimumToRun: 4,
-    priceUSD: 860,
+    feeUSD: 115,
     singleSupplementUSD: 0,
     priceIncludes: [
       "ACAP permit and TIMS card",
@@ -600,7 +630,7 @@ const SEEDS: Seed[] = [
     seatsBooked: 6,
     minimumToRun: 4,
     guaranteedAt: "2026-08-01",
-    priceUSD: 2750,
+    feeUSD: 294,
     singleSupplementUSD: 320,
     priceIncludes: [
       "Restricted-area permit, itemised in full",
@@ -627,7 +657,7 @@ const SEEDS: Seed[] = [
     seatsBooked: 4,
     minimumToRun: 4,
     guaranteedAt: "2026-08-18",
-    priceUSD: 1290,
+    feeUSD: 354,
     singleSupplementUSD: 0,
     priceIncludes: [
       "ACAP permit and TIMS card",
@@ -675,8 +705,24 @@ function compose(seed: Seed): Departure {
   const departs = new Date(`${seed.departsOn}T00:00:00Z`);
   const slug = `${seed.trekId}-${MONTH_SLUG[departs.getUTCMonth()]}-${departs.getUTCFullYear()}`;
 
+  const costSheet = buildCostSheet(seed.trekId, trek, {
+    feeUSD: seed.feeUSD,
+    requiredPermitTypes: trekById(seed.trekId)?.requiredPermitTypes ?? [],
+    departsOn: seed.departsOn,
+    days,
+    groupSizeMax: trek.groupSizeMax,
+    singleSupplementUSD: seed.singleSupplementUSD,
+  });
+
   const composed: Departure = {
     ...seed,
+    guideRequirement: guideRequirement(
+      trek.maxAltitudeM,
+      seed.departsOn,
+      ASSIGNED_GUIDES[seed.id],
+    ),
+    /** Derived: the sum of every provided line, the fee among them. */
+    priceUSD: sheetPrice(costSheet),
     slug,
     trekName: trek.trekName,
     region: trek.region,
@@ -698,15 +744,16 @@ function compose(seed: Seed): Departure {
     decisionDate: addDays(seed.departsOn, -DECISION_LEAD_DAYS),
     costSheetHref: `/departures/${slug}#cost-sheet`,
     costSheetPdfHref: `/departures/${slug}/cost-sheet.pdf`,
-    // Built from the trek's cost components and this date's price, so the
-    // ledger cannot disagree with the headline number — the margin line is
-    // whatever is left, which makes the total exact by construction.
-    costSheet: buildCostSheet(seed.trekId, trek, {
-      priceUSD: seed.priceUSD,
-      days,
-      groupSizeMax: trek.groupSizeMax,
-      singleSupplementUSD: seed.singleSupplementUSD,
-    }),
+    /*
+     * The ledger is built first and the price is read off it.
+     *
+     * It used to run the other way — the price declared, the fee the
+     * remainder — which made the total exact by construction and made it
+     * impossible for a line to leave the price. Under that arrangement moving
+     * airport transfers to "not provided" did not drop the price by $40; it
+     * grew the fee by $40 and charged the same money for less.
+     */
+    costSheet,
     gallery: GALLERIES[seed.trekId] ?? [],
     practicalities: PRACTICALITIES[seed.trekId],
     // Filled in below: the answers quote the cost sheet and the physical

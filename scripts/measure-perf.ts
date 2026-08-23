@@ -108,6 +108,23 @@ const PAGES: {
    * longest comparison set, so it is the worst case rather than the first
    * entry.
    */
+  /*
+   * A document route, because the low budgets are the ones worth enforcing.
+   * These pages have no client component of their own, and the only way that
+   * stays true is if something notices when it stops being true.
+   */
+  {
+    name: "document /licences",
+    path: "/licences",
+    answersMatcher: false,
+    screens: 30,
+  },
+  {
+    name: "document /cancellation",
+    path: "/cancellation",
+    answersMatcher: false,
+    screens: 30,
+  },
   {
     name: "trek /treks/everest-base-camp",
     path: "/treks/everest-base-camp",
@@ -117,11 +134,90 @@ const PAGES: {
 ];
 
 /** Fails the run. Properties of the build, identical on any machine. */
+/**
+ * Per-route JavaScript budgets, in KB transferred.
+ *
+ * Set from measurement, and corrected once by it. The first draft of this
+ * table guessed 260 KB for a static document; the documents measured 269 and
+ * the build failed, which is the table working before it was even finished.
+ *
+ * The audit, taken on the production build at both widths:
+ *
+ *   269 KB   /licences and /cancellation. These carry no client component of
+ *            their own, so this is the floor every route on the site pays:
+ *            React, the Next app runtime and router, the theme provider, and
+ *            the LazyMotion feature bundle the header and footer animate with.
+ *   295 KB   /departures and /treks — the filtered indexes. +26 KB over the
+ *            floor for `useSearchParams`, client navigation and the filter UI.
+ *   295 KB   a departure page. The same +26 KB: the slider, the collapsible
+ *            ledger, the FAQ accordion and the altitude profile share chunks
+ *            with the index components rather than adding to them.
+ *   295 KB   the homepage and a trek page, for the same reason.
+ *
+ * The useful finding is that the floor is 269 KB and everything interactive on
+ * the site fits in 26 KB on top of it. The old single 320 KB ceiling hid that
+ * completely: it was 51 KB of headroom on the heaviest page and 51 KB of
+ * invisible slack on the lightest, so a document page could have quietly
+ * gained a charting library and still passed.
+ *
+ * Budgets below are the measured figure plus a working margin, enforced
+ * per route.
+ */
+const JS_BUDGET: { match: RegExp; budget: number; note: string }[] = [
+  {
+    match:
+      /^\/(licences|safety|pricing|cancellation|about|journal|activities|regions)/,
+    budget: 280,
+    note: "static document — no client component of its own",
+  },
+  {
+    match: /^\/(departures|treks)$/,
+    budget: 310,
+    note: "filtered index — useSearchParams and the filter UI",
+  },
+  {
+    match: /^\/departures\//,
+    budget: 320,
+    note: "departure page — slider, ledger, accordion, profile",
+  },
+  {
+    match: /^\/treks\//,
+    budget: 310,
+    note: "trek page — month table stagger, no filters",
+  },
+  { match: /^\/$/, budget: 320, note: "homepage — matcher and hero" },
+];
+
+/**
+ * Reserved and unspent.
+ *
+ * Named here so that the first pull request that adds a payment SDK has to
+ * confront a number somebody chose, rather than discovering the ceiling by
+ * breaching it. Nothing is allowed to spend this before the booking flow
+ * exists.
+ */
+export const BOOKING_FLOW_RESERVE_KB = 60;
+
+const budgetFor = (routePath: string) =>
+  JS_BUDGET.find((b) => b.match.test(routePath)) ?? {
+    match: /.*/,
+    budget: 320,
+    note: "default",
+  };
+
 const ENFORCED = {
   /** Core Web Vitals "good" threshold. */
   cls: 0.1,
-  /** Transferred JavaScript, KB. Headroom over the current ~240KB. */
-  jsKB: 320,
+  /**
+   * Replaced by per-route budgets. See JS_BUDGET.
+   *
+   * One global ceiling made every page pay for the heaviest one. /licences is
+   * a static document with no client component on it at all and was being held
+   * to the same 320 KB as a departure page with a slider, a collapsible ledger
+   * and an accordion — so it could have quietly gained 200 KB and still passed.
+   * A ceiling nothing can breach is not a ceiling.
+   */
+  jsKB: 0,
   /** A homepage that needs more nodes than this has a structural problem. */
   domNodes: 2600,
   /**
@@ -491,7 +587,7 @@ try {
         `    ${mark(m.clsAfterInteraction <= ENFORCED.cls)} CLS            ${m.clsAfterInteraction.toFixed(4)}  (first paint ${m.clsInitial.toFixed(4)}, ceiling ${ENFORCED.cls})`,
       );
       console.log(
-        `    ${mark(m.jsKB <= ENFORCED.jsKB)} JS transferred ${String(m.jsKB).padStart(4)} KB  (${m.initialJsKB} KB before scrolling, ceiling ${ENFORCED.jsKB} KB)`,
+        `    ${mark(m.jsKB <= budgetFor(target.path).budget)} JS transferred ${String(m.jsKB).padStart(4)} KB  (${m.initialJsKB} KB before scrolling, budget ${budgetFor(target.path).budget} KB — ${budgetFor(target.path).note})`,
       );
       console.log(
         `    ${mark(m.domNodes <= ENFORCED.domNodes)} DOM nodes      ${String(m.domNodes).padStart(4)}     (ceiling ${ENFORCED.domNodes})`,
@@ -520,9 +616,9 @@ try {
           `${target.name} ${viewport.name}: CLS ${m.clsAfterInteraction.toFixed(4)} over ${ENFORCED.cls}`,
         );
       }
-      if (m.jsKB > ENFORCED.jsKB) {
+      if (m.jsKB > budgetFor(target.path).budget) {
         problems.push(
-          `${target.name} ${viewport.name}: ${m.jsKB} KB of JS over ${ENFORCED.jsKB} KB`,
+          `${target.name} ${viewport.name}: ${m.jsKB} KB of JS over its ${budgetFor(target.path).budget} KB budget (${budgetFor(target.path).note})`,
         );
       }
       if (m.domNodes > ENFORCED.domNodes) {

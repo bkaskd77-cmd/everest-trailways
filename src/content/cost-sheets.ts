@@ -37,6 +37,7 @@
  */
 
 import type { TrekProfile } from "./treks.ts";
+import { permitsFor } from "./permits.ts";
 
 export type CostCategory =
   | "permits"
@@ -46,6 +47,10 @@ export type CostCategory =
   | "staff"
   | "equipment"
   | "admin";
+
+export type Disposition = "provided" | "not-provided" | "optional" | "retired";
+
+export type PayableWhen = "in advance" | "on arrival" | "on the trail";
 
 export type CostLine = {
   id: string;
@@ -60,11 +65,57 @@ export type CostLine = {
    * where some rows are per-group and some per-person cannot be added up by a
    * reader or by a guard.
    */
-  amountUSD: number;
-  basis: "per-person" | "per-group" | "per-day";
-  included: boolean;
-  note?: string;
+  /**
+   * What this line currently IS, rather than whether it is in the price.
+   *
+   * `included: boolean` could not express the change that actually happens in
+   * this business. We stop providing airport transfers: the line does not
+   * cease to exist, it becomes something the traveller pays for themselves.
+   * Deleting it loses the fact that it was ever provided and leaves every past
+   * cost sheet asserting something untrue; flipping a boolean loses the
+   * estimate, who they now pay, and when.
+   *
+   *   provided     in the price. Counts toward priceUSD. Needs `amountUSD`,
+   *                `basis` and `payableTo`.
+   *   not-provided rendered under "Not included" as an ESTIMATE. Needs
+   *                `estimatedAmountUSD` (or the literal "varies"), `whoYouPay`
+   *                and `payableWhen`. Does NOT count toward priceUSD.
+   *   optional     rendered under "Optional, not in the price". Needs
+   *                `amountUSD`. Does NOT count toward priceUSD.
+   *   retired      rendered nowhere. Kept so a past cost sheet still says what
+   *                it said, and so nobody re-adds it by hand a year later.
+   *
+   * The requirements above are enforced by `check:departures` rather than by
+   * the type. A discriminated union would catch them at compile time, which is
+   * stronger, but `retired` has to retain whichever fields the line had before
+   * it was retired — so the union's fourth member would be the permissive
+   * shape anyway, and every consumer would pay narrowing costs for a guarantee
+   * one arm gives up. The guard names the missing field and the line.
+   */
+  disposition: Disposition;
+  /** ISO date. Set when admin moves a line between dispositions. */
+  dispositionChangedOn?: string;
+
+  /** provided and optional. The per-person amount. */
+  amountUSD?: number;
+  basis?: "per-person" | "per-group" | "per-day";
+  /** REQUIRED on provided lines. Who we hand the money to. */
   payableTo?: string;
+
+  /**
+   * not-provided only. An estimate, never a charge.
+   *
+   * "varies" is a permitted answer and an honest one — a visa fee that depends
+   * on nationality has no single number, and inventing an average would be
+   * worse than saying so.
+   */
+  estimatedAmountUSD?: number | "varies";
+  /** not-provided only. REQUIRED. Not us — the party who actually takes it. */
+  whoYouPay?: string;
+  /** not-provided only. REQUIRED. Drives the "nothing to pay on arrival" claim. */
+  payableWhen?: PayableWhen;
+
+  note?: string;
 
   /*
    * The arithmetic behind the amount, as data rather than as prose.
@@ -115,6 +166,76 @@ export type Contingency = {
   coveredByInsurance: "usually" | "usually not" | "depends";
   note?: string;
 };
+
+/**
+ * The four views of a cost sheet, derived and never stored.
+ *
+ * Everything that reads a sheet goes through these — the page, the PDF, the
+ * feed, the guards, the demo script. That is the point: when a line changes
+ * disposition there is one place where its placement is decided, so the three
+ * tables, the total, the estimable-extras figure and every sentence quoting
+ * them all move together and none of them can be forgotten.
+ */
+export const providedLines = (sheet: CostSheet) =>
+  sheet.lines.filter((l) => l.disposition === "provided");
+
+export const notProvidedLines = (sheet: CostSheet) =>
+  sheet.lines.filter((l) => l.disposition === "not-provided");
+
+export const optionalLines = (sheet: CostSheet) =>
+  sheet.lines.filter((l) => l.disposition === "optional");
+
+export const retiredLines = (sheet: CostSheet) =>
+  sheet.lines.filter((l) => l.disposition === "retired");
+
+/**
+ * The one number a line contributes to arithmetic, whatever its disposition.
+ *
+ * A not-provided line carries an estimate rather than an amount, and that
+ * estimate may be the word "varies" — a visa fee that depends on nationality
+ * has no single figure and averaging one would be a worse answer than saying
+ * so. `lineAmount` returns 0 for those so a column still adds up, and
+ * `lineVaries` is what the renderer asks before printing a figure at all.
+ */
+export function lineAmount(line: CostLine): number {
+  if (line.disposition === "not-provided") {
+    return typeof line.estimatedAmountUSD === "number"
+      ? line.estimatedAmountUSD
+      : 0;
+  }
+  return line.amountUSD ?? 0;
+}
+
+export const lineVaries = (line: CostLine) =>
+  line.disposition === "not-provided" && line.estimatedAmountUSD === "varies";
+
+/** The published price. Sum of what is provided, and nothing else. */
+export const sheetPrice = (sheet: CostSheet) =>
+  providedLines(sheet).reduce((sum, l) => sum + lineAmount(l), 0);
+
+/**
+ * What "roughly $X of estimable extras" is roughly.
+ *
+ * Lines whose estimate is "varies" are excluded from the arithmetic and
+ * counted separately, because folding an invented number into a total is the
+ * thing the "varies" value exists to avoid.
+ */
+export function estimableExtras(sheet: CostSheet) {
+  const lines = notProvidedLines(sheet);
+  const numeric = lines.filter((l) => typeof l.estimatedAmountUSD === "number");
+  return {
+    total: numeric.reduce(
+      (sum, l) => sum + (l.estimatedAmountUSD as number),
+      0,
+    ),
+    counted: numeric.length,
+    varies: lines.length - numeric.length,
+  };
+}
+
+/** Is anything owed after arrival? Drives the "full price" claim on the page. */
+export const payableOnArrival = (sheet: CostSheet) =>
+  notProvidedLines(sheet).filter((l) => l.payableWhen === "on arrival");
 
 export type CostSheet = {
   lines: CostLine[];
@@ -246,7 +367,13 @@ type TrekCosts = {
   equipmentUSD: number;
   equipmentNote: string;
   /** Anything payable on arrival, which must be disclosed rather than absorbed. */
-  onArrival?: { label: string; amountUSD: number; note: string };
+  /** Always payable on arrival, by definition. The page composes the claim. */
+  onArrival?: {
+    label: string;
+    estimatedAmountUSD: number | "varies";
+    whoYouPay: string;
+    note: string;
+  };
   /**
    * Built from the trek's own facts rather than stored as prose.
    *
@@ -263,7 +390,17 @@ type TrekCosts = {
   disruption: { place: string; kind: "flight" | "road" };
   excludedEstimates: {
     label: string;
-    amountUSD: number;
+    /**
+     * An estimate, never a charge. "varies" where no single number is honest.
+     *
+     * Required alongside `whoYouPay` and `payableWhen` rather than defaulted,
+     * because a default is a value nobody chose and the guard that checks for
+     * these could never then fail. A trip that cannot say who takes the money
+     * and when has not finished describing the cost.
+     */
+    estimatedAmountUSD: number | "varies";
+    whoYouPay: string;
+    payableWhen: PayableWhen;
     note?: string;
     category: CostCategory;
   }[];
@@ -511,19 +648,25 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     excludedEstimates: [
       {
         label: "Hot showers and device charging in teahouses",
-        amountUSD: 45,
+        estimatedAmountUSD: 45,
+        whoYouPay: "The teahouse",
+        payableWhen: "on the trail",
         category: "accommodation",
         note: "$3–6 each, above Namche. Payable to the teahouse.",
       },
       {
         label: "Drinks, snacks and bottled water",
-        amountUSD: 90,
+        estimatedAmountUSD: 90,
+        whoYouPay: "Teahouses on the route",
+        payableWhen: "on the trail",
         category: "meals",
         note: "We provide treated water; buying bottled instead costs about this.",
       },
       {
         label: "Wi-Fi or a data card",
-        amountUSD: 25,
+        estimatedAmountUSD: 25,
+        whoYouPay: "The teahouse, or a phone shop in Kathmandu",
+        payableWhen: "on the trail",
         category: "admin",
       },
     ],
@@ -588,12 +731,16 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     excludedEstimates: [
       {
         label: "Hot showers and device charging",
-        amountUSD: 25,
+        estimatedAmountUSD: 25,
+        whoYouPay: "The teahouse",
+        payableWhen: "on the trail",
         category: "accommodation",
       },
       {
         label: "Drinks, snacks and bottled water",
-        amountUSD: 60,
+        estimatedAmountUSD: 60,
+        whoYouPay: "Teahouses on the route",
+        payableWhen: "on the trail",
         category: "meals",
       },
     ],
@@ -672,17 +819,23 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     excludedEstimates: [
       {
         label: "Hot showers and device charging",
-        amountUSD: 40,
+        estimatedAmountUSD: 40,
+        whoYouPay: "The teahouse",
+        payableWhen: "on the trail",
         category: "accommodation",
       },
       {
         label: "Drinks, snacks and bottled water",
-        amountUSD: 85,
+        estimatedAmountUSD: 85,
+        whoYouPay: "Teahouses on the route",
+        payableWhen: "on the trail",
         category: "meals",
       },
       {
         label: "Hot springs at Tatopani",
-        amountUSD: 5,
+        estimatedAmountUSD: 5,
+        whoYouPay: "The hot springs",
+        payableWhen: "on the trail",
         category: "admin",
       },
     ],
@@ -731,12 +884,16 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     excludedEstimates: [
       {
         label: "Hot showers and device charging",
-        amountUSD: 20,
+        estimatedAmountUSD: 20,
+        whoYouPay: "The teahouse",
+        payableWhen: "on the trail",
         category: "accommodation",
       },
       {
         label: "Drinks, snacks and bottled water",
-        amountUSD: 45,
+        estimatedAmountUSD: 45,
+        whoYouPay: "Teahouses on the route",
+        payableWhen: "on the trail",
         category: "meals",
       },
     ],
@@ -809,17 +966,23 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     excludedEstimates: [
       {
         label: "Hot showers and device charging",
-        amountUSD: 40,
+        estimatedAmountUSD: 40,
+        whoYouPay: "The teahouse",
+        payableWhen: "on the trail",
         category: "accommodation",
       },
       {
         label: "Drinks, snacks and bottled water",
-        amountUSD: 70,
+        estimatedAmountUSD: 70,
+        whoYouPay: "Teahouses on the route",
+        payableWhen: "on the trail",
         category: "meals",
       },
       {
         label: "Monastery photography fees",
-        amountUSD: 20,
+        estimatedAmountUSD: 20,
+        whoYouPay: "The monastery",
+        payableWhen: "on the trail",
         category: "admin",
         note: "Charged at several gompas. Payable on the spot, to the monastery.",
       },
@@ -876,12 +1039,16 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     excludedEstimates: [
       {
         label: "Hot showers and device charging",
-        amountUSD: 12,
+        estimatedAmountUSD: 12,
+        whoYouPay: "The teahouse",
+        payableWhen: "on the trail",
         category: "accommodation",
       },
       {
         label: "Drinks, snacks and bottled water",
-        amountUSD: 30,
+        estimatedAmountUSD: 30,
+        whoYouPay: "Teahouses on the route",
+        payableWhen: "on the trail",
         category: "meals",
       },
     ],
@@ -941,12 +1108,16 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     excludedEstimates: [
       {
         label: "Hot showers and device charging",
-        amountUSD: 18,
+        estimatedAmountUSD: 18,
+        whoYouPay: "The teahouse",
+        payableWhen: "on the trail",
         category: "accommodation",
       },
       {
         label: "Drinks, snacks and bottled water",
-        amountUSD: 40,
+        estimatedAmountUSD: 40,
+        whoYouPay: "Teahouses on the route",
+        payableWhen: "on the trail",
         category: "meals",
       },
     ],
@@ -1005,12 +1176,16 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     excludedEstimates: [
       {
         label: "Drinks at the lodge",
-        amountUSD: 45,
+        estimatedAmountUSD: 45,
+        whoYouPay: "The lodge",
+        payableWhen: "on the trail",
         category: "meals",
       },
       {
         label: "Tharu cultural evening",
-        amountUSD: 8,
+        estimatedAmountUSD: 8,
+        whoYouPay: "The performing group",
+        payableWhen: "on the trail",
         category: "admin",
         note: "Optional. Paid to the community group that runs it.",
       },
@@ -1075,7 +1250,9 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     excludedEstimates: [
       {
         label: "Drinks at the lodge",
-        amountUSD: 50,
+        estimatedAmountUSD: 50,
+        whoYouPay: "The lodge",
+        payableWhen: "on the trail",
         category: "meals",
       },
     ],
@@ -1143,13 +1320,17 @@ const TREK_COSTS: Record<string, TrekCosts> = {
     excludedEstimates: [
       {
         label: "Dinners in Kathmandu",
-        amountUSD: 60,
+        estimatedAmountUSD: 60,
+        whoYouPay: "Restaurants in Kathmandu",
+        payableWhen: "on arrival",
         category: "meals",
         note: "Four dinners, at what a decent Thamel restaurant charges.",
       },
       {
         label: "Drinks and snacks",
-        amountUSD: 25,
+        estimatedAmountUSD: 25,
+        whoYouPay: "Teahouses and lodges on the route",
+        payableWhen: "on the trail",
         category: "meals",
       },
     ],
@@ -1168,31 +1349,41 @@ const TREK_COSTS: Record<string, TrekCosts> = {
  */
 const UNIVERSAL_EXCLUDES: {
   label: string;
-  amountUSD: number;
+  estimatedAmountUSD: number | "varies";
+  whoYouPay: string;
+  payableWhen: PayableWhen;
   category: CostCategory;
   note?: string;
 }[] = [
   {
     label: "International flights to and from Kathmandu",
-    amountUSD: 0,
+    estimatedAmountUSD: "varies",
+    whoYouPay: "Your airline",
+    payableWhen: "in advance",
     category: "transport",
     note: "Varies too much by origin and season to estimate honestly. Europe is typically $700–1,100 return.",
   },
   {
     label: "Nepal visa on arrival",
-    amountUSD: 50,
+    estimatedAmountUSD: 50,
+    whoYouPay: "Nepal Immigration, at the airport",
+    payableWhen: "on arrival",
     category: "admin",
     note: "$30 for 15 days, $50 for 30 days, $125 for 90 days. Paid at the airport, in cash.",
   },
   {
     label: "Travel and evacuation insurance",
-    amountUSD: 120,
+    estimatedAmountUSD: 120,
+    whoYouPay: "Your insurer",
+    payableWhen: "in advance",
     category: "admin",
     note: "Mandatory. See the requirement below for what it must cover. $80–200 for a two-week trip depending on age and cover.",
   },
   {
     label: "Personal trekking gear",
-    amountUSD: 0,
+    estimatedAmountUSD: "varies",
+    whoYouPay: "An outdoor shop, at home or in Kathmandu",
+    payableWhen: "in advance",
     category: "equipment",
     note: "Boots, layers and a down jacket. Buy or rent in Kathmandu for $60–150 if you do not own them.",
   },
@@ -1220,7 +1411,12 @@ export function buildCostSheet(
   trekId: string,
   trek: TrekProfile,
   input: {
-    priceUSD: number;
+    /** What the company keeps. Declared, so the price can be the sum. */
+    feeUSD: number;
+    /** Permit types this trek needs. Records are resolved by date. */
+    requiredPermitTypes: string[];
+    /** ISO date. Decides which permit records are in force. */
+    departsOn: string;
     days: number;
     groupSizeMax: number;
     singleSupplementUSD: number;
@@ -1256,17 +1452,34 @@ export function buildCostSheet(
 
   /* ------------------------------------------------------------ permits */
 
-  costs.permits.forEach((permit, i) =>
-    add({
-      id: `permit-${i + 1}`,
-      label: permit.label,
-      category: "permits",
-      amountUSD: permit.amountUSD,
-      basis: "per-person",
-      included: true,
-      payableTo: permit.payableTo,
-      note: permit.note,
-    }),
+  /*
+   * Composed from the permit records, not stored on the trek.
+   *
+   * The trek says which permit TYPES its route needs; which record satisfies
+   * each type — and for how much — is decided here by the departure's date.
+   * That is what makes the three things admin needs true without a code
+   * change: discontinuing a permit drops it from every affected sheet at once,
+   * a fee change is a new record so past departures keep the figure that
+   * applied on their date, and adding a type to a region flows through
+   * untouched.
+   *
+   * The permit lines used to be typed into each trek's cost profile. Under
+   * that arrangement Nepal discontinuing TIMS would have meant hunting through
+   * ten cost profiles, and missing one would have gone on charging for a
+   * permit that no longer existed.
+   */
+  permitsFor(input.requiredPermitTypes, trek.region, input.departsOn).forEach(
+    (permit, i) =>
+      add({
+        id: `permit-${i + 1}`,
+        label: permit.name,
+        category: "permits",
+        amountUSD: permit.amountUSD,
+        basis: permit.basis === "per-group" ? "per-group" : "per-person",
+        disposition: "provided",
+        payableTo: permit.issuingBody,
+        note: permit.note,
+      }),
   );
 
   /* ---------------------------------------------------------- transport */
@@ -1278,8 +1491,8 @@ export function buildCostSheet(
       category: "transport",
       amountUSD: leg.amountUSD,
       basis: "per-person",
-      included: true,
-      payableTo: leg.payableTo,
+      disposition: "provided",
+      payableTo: leg.payableTo ?? "The operator running the leg",
       note: leg.note,
     }),
   );
@@ -1295,7 +1508,7 @@ export function buildCostSheet(
     unitAmountUSD: costs.perNightUSD,
     unitCount: costs.nights,
     unitLabel: "night",
-    included: true,
+    disposition: "provided",
     /*
      * The fourth place that describes the single room, and the one step 8a
      * missed. Practicalities, the extras table and the FAQ were all derived
@@ -1319,7 +1532,8 @@ export function buildCostSheet(
       unitAmountUSD: costs.perCityNightUSD,
       unitCount: costs.cityNights,
       unitLabel: "night",
-      included: true,
+      disposition: "provided",
+      payableTo: "The hotel in Kathmandu",
     });
   }
 
@@ -1334,7 +1548,7 @@ export function buildCostSheet(
     unitAmountUSD: costs.perDayUSD,
     unitCount: costs.mealDays,
     unitLabel: "day",
-    included: true,
+    disposition: "provided",
     note: costs.mealsNote,
     payableTo: "the teahouses and lodges, by us",
   });
@@ -1351,7 +1565,7 @@ export function buildCostSheet(
     unitCount: input.days,
     unitLabel: "day",
     dividedBy: perGuide,
-    included: true,
+    disposition: "provided",
     note: `Paid at $${STAFF_DAY_USD.guide} a day, above the government minimum and above the common market rate.`,
     payableTo: "the guide",
   });
@@ -1369,7 +1583,7 @@ export function buildCostSheet(
       unitCount: costs.assistantGuideDays,
       unitLabel: "day",
       dividedBy: perGuide,
-      included: true,
+      disposition: "provided",
       note: "Carried for the days spent high, so one person can descend without the group turning back.",
       payableTo: "the assistant guide",
     });
@@ -1388,7 +1602,7 @@ export function buildCostSheet(
       unitCount: input.days,
       unitLabel: "day",
       dividedBy: costs.trekkersPerPorter,
-      included: true,
+      disposition: "provided",
       note: `Paid at $${STAFF_DAY_USD.porter} a day, one porter to ${costs.trekkersPerPorter} trekkers, load capped at 20kg.`,
       payableTo: "the porters",
     });
@@ -1400,7 +1614,8 @@ export function buildCostSheet(
     category: "staff",
     amountUSD: STAFF_COVER_USD,
     basis: "per-person",
-    included: true,
+    disposition: "provided",
+    payableTo: "Our insurers, for staff cover",
     note:
       costs.trekkersPerPorter > 0
         ? "Required by law for every guide and porter. Routinely omitted by operators competing on price."
@@ -1422,7 +1637,8 @@ export function buildCostSheet(
     unitCount: 1,
     unitLabel: "set",
     dividedBy: input.groupSizeMax,
-    included: true,
+    disposition: "provided",
+    payableTo: "Equipment suppliers and our own store",
     note: costs.equipmentNote,
   });
 
@@ -1448,17 +1664,30 @@ export function buildCostSheet(
     category: "admin",
     amountUSD: costs.reserveUSD,
     basis: "per-person",
-    included: true,
+    disposition: "provided",
+    payableTo: "Held by us, against this departure",
     note: "Pays for the delays, reroutes and extra nights under 'When things go wrong' on a trip that does run. Held against this departure rather than pooled.",
   });
+
+  /*
+   * A share of what the trip costs to run, not of what it sells for.
+   *
+   * It was a share of the price, which became circular the moment the price
+   * started being the sum of these lines. Anchoring it to the component cost
+   * also describes it better: the reserve exists to refund money already
+   * committed to running the departure, and that figure is what is above it in
+   * this ledger.
+   */
+  const componentCost = lines.reduce((sum, l) => sum + (l.amountUSD ?? 0), 0);
 
   add({
     id: "guarantee-reserve",
     label: "Guarantee reserve",
     category: "admin",
-    amountUSD: round(input.priceUSD * GUARANTEE_RESERVE_SHARE),
+    amountUSD: round(componentCost * GUARANTEE_RESERVE_SHARE),
     basis: "per-person",
-    included: true,
+    disposition: "provided",
+    payableTo: "Held by us, against this departure",
     note: "Held to refund you in full if this departure does not reach its minimum by the decision date. Held against this departure, not pooled — the refund does not depend on next month's bookings.",
   });
 
@@ -1468,7 +1697,8 @@ export function buildCostSheet(
     category: "admin",
     amountUSD: costs.licencesUSD,
     basis: "per-person",
-    included: true,
+    disposition: "provided",
+    payableTo: "Government registries, TAAN, NMA and our insurers",
     note: "Trekking agency licence, TAAN and NMA membership, company liability insurance, annual registration and audit. The first thing an unregistered operator saves by not paying.",
   });
 
@@ -1481,30 +1711,39 @@ export function buildCostSheet(
     unitAmountUSD: OFFICE_DAY_USD,
     unitCount: input.days,
     unitLabel: "day",
-    included: true,
+    disposition: "provided",
+    payableTo: "Everest Trailways",
     note: "Permits filed in person, flights held and re-held as the weather moves, beds booked ahead where they run out, and somebody reachable at two in the morning when something goes wrong.",
   });
 
   /*
-   * The margin is what is left, and it is a line like any other.
+   * The fee is declared, and the price is what the provided lines add up to.
    *
-   * Deriving it rather than declaring it is what makes the total exact by
-   * construction: there is no arrangement of the numbers above under which the
-   * ledger fails to add up to the price. The guard then checks that this line
-   * is a plausible share of the price, so a bad edit shows up as an implausible
-   * margin instead of silently balancing itself.
+   * It used to be the other way round: the price was declared and the fee was
+   * whatever was left, which made the ledger exact by construction. That was
+   * fine while nothing moved, and wrong the moment anything did. Move airport
+   * transfers to `not-provided` under a plug and the price does not fall by
+   * $40 — the fee silently grows by $40 and the traveller pays the same money
+   * for less. The one number a reader most wants to trust would have been the
+   * one number that could not move.
+   *
+   * So `feeUSD` is a figure somebody sets, the price is the sum of everything
+   * provided, and a line leaving the price takes its money with it. The seeded
+   * fees are the historical remainders, so no published price changes today.
    */
-  const spent = lines.reduce((sum, line) => sum + line.amountUSD, 0);
-  const margin = input.priceUSD - spent;
+  const spent = lines.reduce((sum, line) => sum + (line.amountUSD ?? 0), 0);
+  const fee = input.feeUSD;
+  const price = spent + fee;
 
   add({
     id: "fee",
     label: "Our fee",
     category: "admin",
-    amountUSD: margin,
+    amountUSD: fee,
     basis: "per-person",
-    included: true,
-    note: `${Math.round((margin / input.priceUSD) * 100)}% of the price. What the company keeps once everything above is paid. Not called margin, because margin is a word that means several things and this means one.`,
+    disposition: "provided",
+    payableTo: "Everest Trailways",
+    note: `${Math.round((fee / price) * 100)}% of the price. What the company keeps once everything above is paid. Not called margin, because margin is a word that means several things and this means one.`,
   });
 
   /* ----------------------------------------------------------- excluded */
@@ -1514,9 +1753,10 @@ export function buildCostSheet(
       id: `excluded-${i + 1}`,
       label: item.label,
       category: item.category,
-      amountUSD: item.amountUSD,
-      basis: "per-person",
-      included: false,
+      disposition: "not-provided",
+      estimatedAmountUSD: item.estimatedAmountUSD,
+      whoYouPay: item.whoYouPay,
+      payableWhen: item.payableWhen,
       note: item.note,
     }),
   );
@@ -1526,9 +1766,10 @@ export function buildCostSheet(
       id: "on-arrival",
       label: costs.onArrival.label,
       category: "admin",
-      amountUSD: costs.onArrival.amountUSD,
-      basis: "per-person",
-      included: false,
+      disposition: "not-provided",
+      estimatedAmountUSD: costs.onArrival.estimatedAmountUSD,
+      whoYouPay: costs.onArrival.whoYouPay,
+      payableWhen: "on arrival",
       note: costs.onArrival.note,
     });
   }
@@ -1564,6 +1805,31 @@ export function buildCostSheet(
     },
     ...(costs.extras ?? []),
   ];
+
+  /*
+   * The optional extras become lines too.
+   *
+   * They were a separate array, which meant a priced option could never move:
+   * a single room that we stop offering, or an extra Kathmandu night that
+   * becomes something the traveller books themselves, had nowhere to go except
+   * deletion. As lines with `disposition: "optional"` they sit in the same set
+   * as everything else and can be moved between all four states by the same
+   * edit — which is the whole reason dispositions replaced a boolean.
+   *
+   * `optionalExtras` stays, derived from those lines, so the card, the PDF and
+   * the single-supplement guard keep reading one shape.
+   */
+  for (const extra of optionalExtras) {
+    add({
+      id: `optional-${extra.id}`,
+      label: extra.label,
+      category: "admin",
+      disposition: "optional",
+      amountUSD: extra.amountUSD,
+      basis: "per-person",
+      note: extra.note,
+    });
+  }
 
   return {
     lines,

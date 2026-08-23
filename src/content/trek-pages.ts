@@ -68,6 +68,18 @@ export type Trek = {
    */
   highestSleepM: number;
   difficulty: "moderate" | "challenging" | "strenuous";
+  /**
+   * Permit TYPES, never amounts and never a date-specific record.
+   *
+   * The trek says which permits its route needs; which record satisfies each
+   * one, and for how much, depends on when the departure runs and is resolved
+   * at build time in permits.ts. That separation is the point: a fee change is
+   * a new permit record and no trek is edited, and a permit that is
+   * discontinued disappears from every cost sheet without anybody hunting for
+   * the places it was written down.
+   */
+  requiredPermitTypes: string[];
+  /** Prose for the page. The types above are what the ledger is built from. */
   permitsRequired: string[];
   seasonality: MonthRating[];
   suitsYouIf: string[];
@@ -118,6 +130,10 @@ export const TREK_PAGES: Trek[] = [
     maxAltitudeM: 5364,
     highestSleepM: 5164,
     difficulty: "challenging",
+    requiredPermitTypes: [
+      "Sagarmatha National Park Entry",
+      "Rural Municipality Trekking Levy",
+    ],
     permitsRequired: [
       "Sagarmatha National Park entry",
       "Khumbu Pasang Lhamu rural municipality fee",
@@ -228,6 +244,10 @@ export const TREK_PAGES: Trek[] = [
     maxAltitudeM: 4130,
     highestSleepM: 4130,
     difficulty: "moderate",
+    requiredPermitTypes: [
+      "Annapurna Conservation Area Permit",
+      "Rural Municipality Trekking Levy",
+    ],
     permitsRequired: ["Annapurna Conservation Area permit", "TIMS card"],
     routeFeatures: ["Modi Khola"],
     routeOverview:
@@ -334,6 +354,10 @@ export const TREK_PAGES: Trek[] = [
     maxAltitudeM: 5416,
     highestSleepM: 4525,
     difficulty: "strenuous",
+    requiredPermitTypes: [
+      "Annapurna Conservation Area Permit",
+      "Rural Municipality Trekking Levy",
+    ],
     permitsRequired: ["Annapurna Conservation Area permit", "TIMS card"],
     routeFeatures: ["Marsyangdi", "Kali Gandaki"],
     routeOverview:
@@ -440,6 +464,10 @@ export const TREK_PAGES: Trek[] = [
     maxAltitudeM: 4984,
     highestSleepM: 3870,
     difficulty: "moderate",
+    requiredPermitTypes: [
+      "Langtang National Park Entry",
+      "Rural Municipality Trekking Levy",
+    ],
     permitsRequired: ["Langtang National Park entry", "TIMS card"],
     routeOverview:
       "A long road day to Syabrubesi, then two days climbing through forest to Lama Hotel and out into the open valley at Langtang village. Kyanjin Gompa is the last settlement and the base for a day walk to the ridge above it. The return is the same trail in two days.",
@@ -545,6 +573,10 @@ export const TREK_PAGES: Trek[] = [
     maxAltitudeM: 3840,
     highestSleepM: 3840,
     difficulty: "moderate",
+    requiredPermitTypes: [
+      "Annapurna Conservation Area Permit",
+      "Upper Mustang Restricted Area Permit",
+    ],
     permitsRequired: [
       "Upper Mustang restricted area permit",
       "Annapurna Conservation Area permit",
@@ -654,6 +686,10 @@ export const TREK_PAGES: Trek[] = [
     maxAltitudeM: 3210,
     highestSleepM: 2874,
     difficulty: "moderate",
+    requiredPermitTypes: [
+      "Annapurna Conservation Area Permit",
+      "Rural Municipality Trekking Levy",
+    ],
     permitsRequired: ["Annapurna Conservation Area permit", "TIMS card"],
     routeOverview:
       "Road to Pokhara and a jeep to the trailhead, then a long climb through Ulleri to Ghorepani. The viewpoint is walked before dawn and returned to breakfast. The way out crosses to Tadapani and drops through forest to the road head.",
@@ -755,6 +791,10 @@ export const TREK_PAGES: Trek[] = [
     maxAltitudeM: 4500,
     highestSleepM: 3580,
     difficulty: "moderate",
+    requiredPermitTypes: [
+      "Annapurna Conservation Area Permit",
+      "Rural Municipality Trekking Levy",
+    ],
     permitsRequired: ["Annapurna Conservation Area permit", "TIMS card"],
     routeOverview:
       "Road to Pokhara and a jeep to the trailhead, then up into forest at Forest Camp and along the ridge through Low Camp to High Camp. The high point is walked from High Camp and returned the same day. The descent leaves the ridge at Siding and rejoins the road.",
@@ -848,6 +888,7 @@ export const TREK_PAGES: Trek[] = [
     maxAltitudeM: 415,
     highestSleepM: 415,
     difficulty: "moderate",
+    requiredPermitTypes: ["Terai National Park Entry"],
     permitsRequired: ["Chitwan National Park entry"],
     routeFeatures: ["Rapti", "Tharu", "Terai"],
     routeOverview:
@@ -954,6 +995,7 @@ export const TREK_PAGES: Trek[] = [
     maxAltitudeM: 220,
     highestSleepM: 220,
     difficulty: "moderate",
+    requiredPermitTypes: ["Terai National Park Entry"],
     permitsRequired: ["Bardia National Park entry"],
     routeFeatures: ["Karnali", "Tharu", "Terai"],
     routeOverview:
@@ -1056,6 +1098,7 @@ export const TREK_PAGES: Trek[] = [
     maxAltitudeM: 2175,
     highestSleepM: 2175,
     difficulty: "moderate",
+    requiredPermitTypes: ["Kathmandu Valley Rim Area Entry"],
     permitsRequired: [
       "Shivapuri Nagarjun National Park entry",
       "Heritage site entry at Bhaktapur and Changu Narayan",

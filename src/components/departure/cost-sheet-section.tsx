@@ -5,7 +5,16 @@ import { AskPanel } from "@/components/departures/ask-panel";
 import { CostLedger } from "@/components/departure/cost-ledger";
 import { SectionHead } from "@/components/departure/section-head";
 import { Button } from "@/components/ui/button";
-import type { Contingency, Departure } from "@/content/departures";
+import {
+  type Contingency,
+  type Departure,
+  estimableExtras,
+  lineAmount,
+  notProvidedLines,
+  optionalLines,
+  payableOnArrival,
+  providedLines,
+} from "@/content/departures";
 import { cn } from "@/lib/utils";
 
 /**
@@ -144,24 +153,31 @@ function ContingencyEntry({ item }: { item: Contingency }) {
 
 export function CostSheetSection({ departure }: { departure: Departure }) {
   const { costSheet } = departure;
-  const included = costSheet.lines.filter((l) => l.included);
-  const excluded = costSheet.lines.filter((l) => !l.included);
+  const included = providedLines(costSheet);
+  const excluded = notProvidedLines(costSheet);
 
   /*
-   * "There is nothing to pay on arrival" is a strong claim, so it is derived
-   * rather than typed. If any excluded line is marked as payable on arrival —
-   * a gate fee, a park charge collected at the door — the page says what it is
-   * instead of making the claim.
+   * "There is nothing to pay on arrival" is a strong claim, so it is composed
+   * from line state and never stored.
+   *
+   * It used to key on a single line id, which meant the claim was true only
+   * for the one exception somebody had thought of. Move any line to
+   * not-provided with `payableWhen: "on arrival"` — a park fee collected at
+   * the gate, transfers we have stopped running — and the sentence became
+   * false with nothing to catch it. It now reads every not-provided line, so
+   * the claim cannot outlive the thing that made it true.
    */
-  const onArrival = excluded.filter((l) => l.id === "on-arrival");
-  const estimable = excluded.filter((l) => l.amountUSD > 0);
-  const excludedTotal = estimable.reduce((sum, l) => sum + l.amountUSD, 0);
+  const onArrival = payableOnArrival(costSheet);
+  const onArrivalTotal = onArrival.reduce((sum, l) => sum + lineAmount(l), 0);
+  const extrasFigure = estimableExtras(costSheet);
+  const excludedTotal = extrasFigure.total;
 
   const ins = costSheet.insuranceRequirement;
   const [tipLow, tipHigh] = costSheet.tipping.typicalRangeUSD;
   const bookends = bookendLabels(included);
   const divided = included.filter((l) => l.dividedBy !== undefined);
-  const extras = costSheet.optionalExtras;
+  /* Read from the lines, so a line moved to `optional` appears here. */
+  const extras = optionalLines(costSheet);
 
   return (
     <section
@@ -212,10 +228,16 @@ export function CostSheetSection({ departure }: { departure: Departure }) {
               <>This is the full price. There is nothing to pay on arrival.</>
             ) : (
               <>
-                Payable on arrival:{" "}
-                {onArrival.map((l) => l.label.toLowerCase()).join(", ")}. We
-                cannot prepay {onArrival.length > 1 ? "these" : "this"} because
-                it is collected at the gate in cash.
+                This is the full price of what we provide. What you pay for
+                yourself on arrival in Nepal:{" "}
+                {onArrival.map((l) => l.label).join(", ")}
+                {onArrivalTotal > 0 ? (
+                  <>, roughly {money(onArrivalTotal)}</>
+                ) : null}
+                . {onArrival.length > 1 ? "Those go" : "That goes"} to{" "}
+                {[...new Set(onArrival.map((l) => l.whoYouPay))].join(" and ")}
+                {" — "}not to us, so we cannot prepay{" "}
+                {onArrival.length > 1 ? "them" : "it"}.
               </>
             )}
           </p>
@@ -249,7 +271,7 @@ export function CostSheetSection({ departure }: { departure: Departure }) {
                       )}
                     </th>
                     <td className="py-3 text-right align-top tabular text-sm whitespace-nowrap">
-                      {money(extra.amountUSD)}
+                      {money(lineAmount(extra))}
                     </td>
                   </tr>
                 ))}

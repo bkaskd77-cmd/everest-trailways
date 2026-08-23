@@ -29,6 +29,7 @@
  */
 
 import type { Departure } from "./departures.ts";
+import { lineAmount, payableOnArrival } from "./cost-sheets.ts";
 import type { Focal } from "../lib/image-slots.ts";
 
 export type GalleryImage = {
@@ -649,7 +650,7 @@ export function isTeahouseTrek(trekId: string): boolean {
 /** Does this departure actually pay for a second guide? */
 function hasAssistantGuide(d: Departure): boolean {
   return d.costSheet.lines.some(
-    (line) => line.included && line.id === "staff-assistant",
+    (line) => line.disposition === "provided" && line.id === "staff-assistant",
   );
 }
 
@@ -658,8 +659,11 @@ export function buildFaqs(d: Departure): Faq[] {
   const teahouse = isTeahouseTrek(d.trekId);
   const assistant = hasAssistantGuide(d);
   const porters = d.costSheet.lines.some(
-    (line) => line.included && line.id === "staff-porter",
+    (line) => line.disposition === "provided" && line.id === "staff-porter",
   );
+  /* The same source the cost sheet reads, so the two cannot disagree. */
+  const onArrival = payableOnArrival(d.costSheet);
+  const onArrivalTotal = onArrival.reduce((sum, l) => sum + lineAmount(l), 0);
 
   return [
     {
@@ -727,7 +731,27 @@ export function buildFaqs(d: Departure): Faq[] {
     },
     {
       question: "Is the price on this page really what I pay?",
-      answer: `Yes. ${money(d.priceUSD)} covers everything in the cost sheet above, which itemises where every dollar of it goes, and there is nothing to pay on arrival. What is not included is listed with estimates, and the optional extras are priced separately and are genuinely optional. ${
+      /*
+       * Composed from the same line state the page reads, never written down.
+       *
+       * The stored version of this answer said "there is nothing to pay on
+       * arrival" unconditionally. It was true when it was typed and it would
+       * have gone on being asserted the first time a line moved to
+       * not-provided with `payableWhen: "on arrival"` — a claim about the
+       * ledger that the ledger had stopped supporting, in the FAQ, where a
+       * reader is most likely to take it at face value.
+       */
+      answer: `Yes. ${money(d.priceUSD)} covers everything in the cost sheet above, which itemises where every dollar of it goes. ${
+        onArrival.length === 0
+          ? "There is nothing to pay on arrival."
+          : `What you pay for yourself on arrival in Nepal: ${onArrival
+              .map((l) => l.label)
+              .join(", ")}${
+              onArrivalTotal > 0 ? `, roughly ${money(onArrivalTotal)}` : ""
+            }. That goes to ${[
+              ...new Set(onArrival.map((l) => l.whoYouPay)),
+            ].join(" and ")} — not to us, so we cannot prepay it.`
+      } What is not included is listed with estimates, and the optional extras are priced separately and are genuinely optional. ${
         single
           ? `The only other thing we would charge you is the ${money(single.amountUSD)} single room, if you want one.`
           : "There is nothing else we would charge you."

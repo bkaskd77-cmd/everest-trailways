@@ -13,7 +13,7 @@
  * There are two halves to this file, and they answer different questions.
  *
  * THE LEDGER reads every guard in `scripts/` and extracts the name of every
- * assertion it can emit — currently a hundred and seventy-odd. Each one must
+ * assertion it can emit — currently two hundred of them. Each one must
  * then be accounted for: either a mutation below proves it fires, or it is
  * written into UNPROVEN with a reason. An assertion in neither list fails this
  * command. That is the part that holds over time: a rule cannot be added to
@@ -28,7 +28,7 @@
  *
  * What this file deliberately does not claim: that the unproven assertions are
  * working. They are unproven. The count is printed every run rather than
- * rounded off, because a number that says "20 of 177" is doing its job and a
+ * rounded off, because a number that says "27 of 200" is doing its job and a
  * green tick that says "all guards verified" would be the third broken guard.
  *
  * Deliberately not run inside `pnpm build`: it rewrites source files, and a
@@ -57,12 +57,20 @@ type Mutation = {
 
 const MUTATIONS: Mutation[] = [
   {
-    // Not a component cost — those re-balance, because the fee is the
-    // remainder. Pinning the fee is what makes the sum wrong.
-    name: "a cost sheet that does not add up",
+    /*
+     * Retargeted in step 10. This used to pin the fee, which worked while the
+     * fee was the remainder that made the total exact. Now the price IS the
+     * sum, so the two only disagree if one of them moves — and `sheetPrice`
+     * is the one place that could move them apart.
+     */
+    name: "a price that is not the sum of its lines",
     guard: "check-departures.ts",
     file: "src/content/cost-sheets.ts",
-    break: (s) => s.replace("    amountUSD: margin,", "    amountUSD: 100,"),
+    break: (s) =>
+      s.replace(
+        "providedLines(sheet).reduce((sum, l) => sum + lineAmount(l), 0);",
+        "providedLines(sheet).reduce((sum, l) => sum + lineAmount(l), 1);",
+      ),
     expect: "ledger-mismatch",
   },
   {
@@ -297,6 +305,84 @@ const MUTATIONS: Mutation[] = [
       s.replace(/for \(const dy of \[[^\]]*\]\) \{/, "for (const dy of [0]) {"),
     expect: "map-labels-collide",
   },
+
+  /* ------------------------------------------- step 10: cost and trust */
+
+  {
+    // Every dollar in the price has a recipient, or it is not itemised.
+    name: "a provided line with nobody to pay",
+    guard: "check-departures.ts",
+    file: "src/content/cost-sheets.ts",
+    break: (s) => s.replace(/payableTo: "Everest Trailways",/, ""),
+    expect: "line-missing-field",
+  },
+  {
+    // The regime this models: a permit type a trek needs, with no record in
+    // force. A silently missing fee somebody will be charged at the gate.
+    name: "a trek needing a permit no record covers",
+    guard: "check-departures.ts",
+    file: "src/content/permits.ts",
+    break: (s) =>
+      s.replace(
+        /id: "sagarmatha-2026",([\s\S]*?)status: "active",/,
+        'id: "sagarmatha-2026",$1status: "discontinued",',
+      ),
+    expect: "permit-unresolved",
+  },
+  {
+    name: "a superseded permit with no successor named",
+    guard: "check-departures.ts",
+    file: "src/content/permits.ts",
+    break: (s) => s.replace('supersededBy: "local-levy-2024",', ""),
+    expect: "permit-superseded-orphan",
+  },
+  {
+    // The worst thing this site could publish: a plausible number nobody
+    // has checked, on the page arguing that everything here is checkable.
+    name: "a licence number published without verification",
+    guard: "check-documents.ts",
+    file: "src/content/credentials.ts",
+    break: (s) => s.replace('number: "—",', 'number: "1234-5678",'),
+    expect: "unverified-credential",
+  },
+  {
+    name: "a credential that does not say what it fails to prove",
+    guard: "check-documents.ts",
+    file: "src/content/credentials.ts",
+    break: (s) =>
+      s.replace(/whatItDoesNotMean:(\s+)"[^"]+"/, 'whatItDoesNotMean:$1""'),
+    expect: "missing-limitation",
+  },
+  {
+    // A departure quietly running a thinner ratio than the safety page states.
+    name: "a departure contradicting the published guide ratio",
+    guard: "check-documents.ts",
+    file: "src/content/safety.ts",
+    break: (s) => s.replace('guideRatio: "1:8",', 'guideRatio: "1:4",'),
+    expect: "ratio-contradicts-safety",
+  },
+  {
+    name: "a certification tier below the route it is derived for",
+    guard: "check-departures.ts",
+    file: "src/content/certification.ts",
+    break: (s) =>
+      s.replace(
+        ".filter((t) => t.maxAltitudeM >= maxAltitudeM)",
+        ".filter(() => true)",
+      ),
+    expect: "certification-below-route",
+  },
+  {
+    name: "a refund scale where more notice returns less",
+    guard: "check-documents.ts",
+    file: "src/content/cancellation.ts",
+    break: (s) =>
+      s.replace(
+        '{ fromDaysBefore: 60, refundPercent: 100, note: "PLACEHOLDER" },',
+        '{ fromDaysBefore: 60, refundPercent: 10, note: "PLACEHOLDER" },',
+      ),
+    expect: "scale-not-monotonic",
+  },
 ];
 
 /* -------------------------------------------------------------- the ledger */
@@ -394,6 +480,18 @@ for (const rule of [
   "incoherent-archive",
   "no-permits",
   "map-too-cramped",
+  /*
+   * Step 10 siblings: each shares a code path with a rule that IS mutated
+   * above, so the path is exercised and the specific branch is not.
+   */
+  "line-wrong-field",
+  "permit-out-of-window",
+  "permit-bad-window",
+  "certification-unresolved",
+  "certification-contradicts-safety",
+  "verified-without-number",
+  "missing-verification-route",
+  "scale-incomplete",
   "gallery-missing-basics",
   "gallery-thin-caption",
   "gallery-no-alt",
@@ -522,6 +620,20 @@ for (const rule of [
   "low-contrast",
   "flat-zones",
   "feed-docs",
+  /*
+   * Step 10, genuinely untested. Two are worth returning to:
+   * `describes-a-service-we-do-not-provide` catches a practicality still
+   * promising something whose cost line has moved, and
+   * `unverified-licence-number` is the departure-page twin of the credential
+   * rule that is mutated above. Neither has a clean single-token mutation.
+   */
+  "unverified-licence-number",
+  "describes-a-service-we-do-not-provide",
+  "missing-limits",
+  "refund-term-contradicts-policy",
+  "missing-document",
+  "not-a-document",
+  "no-review-date",
 ])
   UNPROVEN[rule] = KIND.untested;
 

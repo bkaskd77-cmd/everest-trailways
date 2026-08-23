@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Mail, MapPin, Phone } from "lucide-react";
 
 import { footerNav, siteConfig } from "@/lib/site";
+import { footerCredentials } from "@/content/credentials";
 
 const contact = [
   { icon: MapPin, label: "Thamel, Kathmandu 44600, Nepal" },
@@ -80,9 +81,23 @@ export function SiteFooter() {
           <p>
             © {new Date().getFullYear()} {siteConfig.name}. All rights reserved.
           </p>
+          {/*
+            Driven from the credentials file, not typed here.
+
+            The footer carried its own two dashes and would have gone on
+            printing them after the real numbers arrived on the licences page —
+            two sources for one fact, in the place nobody looks at twice.
+          */}
           <p className="flex flex-wrap gap-x-6 gap-y-1 tabular">
-            <span>TAAN Member No. —</span>
-            <span>Tourism Licence No. —</span>
+            {footerCredentials().map((c) => (
+              <Link
+                key={c.label}
+                href="/licences"
+                className="hover:text-glacier"
+              >
+                {c.label} {c.number}
+              </Link>
+            ))}
           </p>
         </div>
       </div>

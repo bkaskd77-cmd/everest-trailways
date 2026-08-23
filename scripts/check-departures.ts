@@ -35,13 +35,23 @@ import {
   type Departure,
   type DepartureStatus,
   heroImages,
+  lineAmount,
+  notProvidedLines,
+  payableOnArrival,
+  providedLines,
 } from "../src/content/departures.ts";
+import { CERTIFICATION_TIERS } from "../src/content/certification.ts";
+import { PERMITS, permitsFor } from "../src/content/permits.ts";
+import { trekById } from "../src/content/trek-pages.ts";
 import {
   H,
   W,
   labelCollisions,
   layoutRoute,
 } from "../src/lib/route-diagram.ts";
+
+/** Stripped before the place-name scan; see the note at its call site. */
+const COMPANY_NAME = "Everest Trailways";
 
 type Problem = { id: string; rule: string; detail: string };
 const problems: Problem[] = [];
@@ -273,10 +283,10 @@ const MARGIN_BAND = { min: 0.05, max: 0.4 };
 
 for (const d of departures) {
   const { id, costSheet } = d;
-  const included = costSheet.lines.filter((l) => l.included);
-  const excluded = costSheet.lines.filter((l) => !l.included);
+  const included = providedLines(costSheet);
+  const excluded = notProvidedLines(costSheet);
 
-  const ledger = included.reduce((sum, l) => sum + l.amountUSD, 0);
+  const ledger = included.reduce((sum, l) => sum + lineAmount(l), 0);
   if (ledger !== d.priceUSD) {
     fail(
       id,
@@ -295,10 +305,10 @@ for (const d of departures) {
   }
 
   for (const line of included) {
-    if (!Number.isInteger(line.amountUSD)) {
-      fail(id, "fractional-line", `"${line.label}" is $${line.amountUSD}`);
+    if (!Number.isInteger(lineAmount(line))) {
+      fail(id, "fractional-line", `"${line.label}" is $${lineAmount(line)}`);
     }
-    if (line.amountUSD < 0) {
+    if (lineAmount(line) < 0) {
       fail(
         id,
         "negative-line",
@@ -316,7 +326,7 @@ for (const d of departures) {
   if (!staff.some((l) => /guide/i.test(l.label))) {
     fail(id, "wages-buried", "no distinct guide wage line");
   }
-  if (staff.reduce((sum, l) => sum + l.amountUSD, 0) <= 0) {
+  if (staff.reduce((sum, l) => sum + lineAmount(l), 0) <= 0) {
     fail(id, "wages-buried", "staff lines total zero");
   }
 
@@ -324,7 +334,7 @@ for (const d of departures) {
   if (!margin) {
     fail(id, "no-fee", "the company fee is not published as its own line");
   } else {
-    const share = margin.amountUSD / d.priceUSD;
+    const share = lineAmount(margin) / d.priceUSD;
     if (share < MARGIN_BAND.min || share > MARGIN_BAND.max) {
       fail(
         id,
@@ -464,11 +474,11 @@ for (const d of departures) {
     if (hasUnits) {
       const gross = line.unitAmountUSD! * line.unitCount!;
       const expected = Math.round(gross / (line.dividedBy ?? 1));
-      if (Math.abs(expected - line.amountUSD) > 1) {
+      if (Math.abs(expected - lineAmount(line)) > 1) {
         fail(
           id,
           "arithmetic",
-          `"${line.label}" states ${line.unitAmountUSD} x ${line.unitCount}${line.dividedBy ? ` / ${line.dividedBy}` : ""} = $${expected}, but the amount is $${line.amountUSD}`,
+          `"${line.label}" states ${line.unitAmountUSD} x ${line.unitCount}${line.dividedBy ? ` / ${line.dividedBy}` : ""} = $${expected}, but the amount is $${lineAmount(line)}`,
         );
       }
     }
@@ -544,7 +554,11 @@ for (const d of departures) {
     "office",
     "fee",
   ]) {
-    if (!costSheet.lines.some((l) => l.id === required && l.included)) {
+    if (
+      !costSheet.lines.some(
+        (l) => l.id === required && l.disposition === "provided",
+      )
+    ) {
       fail(
         id,
         "admin-not-split",
@@ -607,7 +621,7 @@ for (const d of departures) {
    * including the ones with no porters. Copy that cites a line has to be built
    * from the lines.
    */
-  const introSource = costSheet.lines.filter((l) => l.included);
+  const introSource = providedLines(costSheet);
   if (introSource.length < 2) {
     fail(id, "intro-unsupported", "too few lines to describe the sheet");
   } else {
@@ -734,6 +748,246 @@ for (const d of departures) {
         id,
         "map-too-cramped",
         `the diagram occupies ${Math.round(spreadX)}x${Math.round(spreadY)} of ${W}x${H}`,
+      );
+    }
+  }
+
+  /* --------------------------------------------------- certification */
+
+  /*
+   * The requirement is a floor, and the two ways to breach it are a derivation
+   * that lands below the route's altitude, and a guide assigned who does not
+   * meet it. The third rule here is the one that matters most on a site making
+   * this argument: a licence number that is present but unverified. A
+   * plausible string in a field nobody checks is the easiest lie to tell and
+   * the hardest to notice.
+   */
+  const requirement = d.guideRequirement;
+  const tier = CERTIFICATION_TIERS.find(
+    (t) => t.level === requirement.certificationLevel,
+  );
+  if (!tier) {
+    fail(
+      id,
+      "certification-unresolved",
+      `requires "${requirement.certificationLevel}", which is not a tier on file`,
+    );
+  } else if (tier.maxAltitudeM < d.maxAltitudeM) {
+    fail(
+      id,
+      "certification-below-route",
+      `derived ${tier.level} (to ${tier.maxAltitudeM} m) for a route reaching ${d.maxAltitudeM} m`,
+    );
+  }
+
+  const guide = requirement.assignedGuide;
+  if (guide) {
+    const held = CERTIFICATION_TIERS.find(
+      (t) => t.level === guide.certificationLevel,
+    );
+    if (!held || held.maxAltitudeM < d.maxAltitudeM) {
+      fail(
+        id,
+        "certification-below-route",
+        `assigned guide holds ${guide.certificationLevel}, which does not cover ${d.maxAltitudeM} m`,
+      );
+    }
+    if (guide.licenceNumber && guide.status !== "verified") {
+      fail(
+        id,
+        "unverified-licence-number",
+        `publishes licence number "${guide.licenceNumber}" with status "${guide.status}" — a number on the page is a claim we have checked it`,
+      );
+    }
+  }
+
+  /* --------------------------------------------------------- permits */
+
+  /*
+   * The permit regime is data, so these are the rules that keep the data
+   * coherent — the code that reads it has nothing to assert about Nepal.
+   */
+  const trekPage = trekById(d.trekId);
+  const required = trekPage?.requiredPermitTypes ?? [];
+  for (const type of required) {
+    const resolved = permitsFor([type], d.region, d.departsOn);
+    if (!resolved.length) {
+      fail(
+        id,
+        "permit-unresolved",
+        `requires "${type}" but no active record covers ${d.region} on ${d.departsOn} — the cost sheet is silently missing a fee somebody will be charged`,
+      );
+    }
+  }
+
+  for (const line of d.costSheet.lines) {
+    if (line.category !== "permits" || line.disposition !== "provided")
+      continue;
+    const record = PERMITS.find(
+      (permit) =>
+        permit.name === line.label &&
+        permit.amountUSD === line.amountUSD &&
+        permit.status === "active" &&
+        permit.effectiveFrom <= d.departsOn &&
+        (permit.effectiveUntil === undefined ||
+          d.departsOn <= permit.effectiveUntil),
+    );
+    if (!record) {
+      fail(
+        id,
+        "permit-out-of-window",
+        `charges "${line.label}" at $${line.amountUSD}, which no active record covers on ${d.departsOn}`,
+      );
+    }
+  }
+
+  /* ---------------------------------------------------- dispositions */
+
+  const costSheet = d.costSheet;
+
+  /*
+   * Each disposition owes a different set of fields, and the type does not
+   * enforce it — `retired` has to keep whatever the line had before it was
+   * retired, so the shape is permissive by necessity. This is where the
+   * requirement actually lives.
+   */
+  for (const line of costSheet.lines) {
+    if (line.disposition === "provided") {
+      if (!line.payableTo) {
+        fail(
+          id,
+          "line-missing-field",
+          `provided line "${line.id}" does not say who is paid — every dollar in the price has a recipient or it is not really itemised`,
+        );
+      }
+      if (typeof line.amountUSD !== "number") {
+        fail(
+          id,
+          "line-missing-field",
+          `provided line "${line.id}" has no amount`,
+        );
+      }
+      if (!line.basis) {
+        fail(
+          id,
+          "line-missing-field",
+          `provided line "${line.id}" has no basis`,
+        );
+      }
+    }
+
+    if (line.disposition === "not-provided") {
+      if (line.estimatedAmountUSD === undefined) {
+        fail(
+          id,
+          "line-missing-field",
+          `not-provided line "${line.id}" has no estimate — an exclusion without a number discloses a cost while leaving the reader unable to budget for it. "varies" is a permitted answer`,
+        );
+      }
+      if (!line.whoYouPay) {
+        fail(
+          id,
+          "line-missing-field",
+          `not-provided line "${line.id}" does not say who takes the money`,
+        );
+      }
+      if (!line.payableWhen) {
+        fail(
+          id,
+          "line-missing-field",
+          `not-provided line "${line.id}" does not say when it is payable, so the on-arrival claim cannot be composed`,
+        );
+      }
+      if (line.amountUSD !== undefined) {
+        fail(
+          id,
+          "line-wrong-field",
+          `not-provided line "${line.id}" carries amountUSD, which would put an estimate into the price`,
+        );
+      }
+    }
+
+    if (line.disposition === "optional" && typeof line.amountUSD !== "number") {
+      fail(
+        id,
+        "line-missing-field",
+        `optional line "${line.id}" has no amount`,
+      );
+    }
+  }
+
+  /*
+   * The provided set IS the price. Not approximately.
+   *
+   * This used to be true by construction, because the fee was the remainder.
+   * Now that the fee is declared and the price is the sum, it is a real
+   * assertion again — and the one that catches a line being edited without its
+   * disposition being thought about.
+   */
+  const providedSum = providedLines(costSheet).reduce(
+    (sum, l) => sum + lineAmount(l),
+    0,
+  );
+  if (providedSum !== d.priceUSD) {
+    fail(
+      id,
+      "ledger-mismatch",
+      `provided lines sum to ${providedSum} but the price is ${d.priceUSD}`,
+    );
+  }
+
+  /*
+   * Nothing may describe arranging a service we no longer provide.
+   *
+   * The case this exists for: transfers move to not-provided, and a
+   * practicality still says "we collect you from the airport". The line moved,
+   * the sentence did not, and the sentence is what a reader believes.
+   */
+  const goneLines = costSheet.lines.filter(
+    (l) => l.disposition === "not-provided" || l.disposition === "retired",
+  );
+  const proseSources: [string, string][] = [
+    ...costSheet.contingencies.map(
+      (c) =>
+        [`contingency ${c.id}`, `${c.whatWeDo} ${c.note ?? ""}`] as [
+          string,
+          string,
+        ],
+    ),
+    ...Object.entries(d.practicalities).map(
+      ([k, v]) => [`practicalities.${k}`, String(v)] as [string, string],
+    ),
+    ...d.faqs.map((f, i) => [`faq[${i}]`, f.answer] as [string, string]),
+  ];
+  for (const line of goneLines) {
+    /* Only the distinctive ones. "Drinks" would match half the site. */
+    if (line.label.length < 14) continue;
+    for (const [where, text] of proseSources) {
+      if (!text.includes(line.label)) continue;
+      /*
+       * Naming it is fine. Claiming to do it is not.
+       *
+       * The not-included table names every one of these by definition, and so
+       * does the composed sentence about what is payable on arrival — that is
+       * the page being honest, not the page contradicting itself. What must
+       * not survive a line moving is prose saying WE arrange it. So the rule
+       * fires only where the same sentence puts the company behind the verb.
+       */
+      const sentence =
+        text.split(/(?<=[.!?])\s+/).find((part) => part.includes(line.label)) ??
+        "";
+      if (
+        !/we\s+(arrange|provide|collect|book|include|organise|cover|pay|supply|handle)/i.test(
+          sentence,
+        ) &&
+        !/is included/i.test(sentence)
+      ) {
+        continue;
+      }
+      fail(
+        id,
+        "describes-a-service-we-do-not-provide",
+        `${where} says we provide "${line.label}", whose line is ${line.disposition}`,
       );
     }
   }
@@ -908,6 +1162,20 @@ for (const d of departures) {
     d.costSheet.tipping.typicalRangeUSD[0],
     d.costSheet.tipping.typicalRangeUSD[1],
     ...d.costSheet.optionalExtras.map((e) => e.amountUSD),
+    /*
+     * Estimates are quotable figures too.
+     *
+     * The "is this really what I pay" answer now names what is payable on
+     * arrival and roughly how much, which is a number the reader can check
+     * against the not-included table. Before this it was an unrecognised
+     * figure and the guard called it a contradiction — correctly, by its own
+     * rule, and wrongly about the page.
+     */
+    ...d.costSheet.lines
+      .filter((l) => typeof l.estimatedAmountUSD === "number")
+      .map((l) => l.estimatedAmountUSD as number),
+    /* The on-arrival subtotal the sentence actually prints. */
+    payableOnArrival(d.costSheet).reduce((sum, l) => sum + lineAmount(l), 0),
   ]);
 
   for (const faq of d.faqs) {
@@ -1152,8 +1420,18 @@ for (const d of departures) {
   ];
 
   for (const [where, text] of rendered) {
+    /*
+     * Our own name is not a place.
+     *
+     * The company is called Everest Trailways, so "payable to Everest
+     * Trailways" on a Bardia cost sheet tripped the foreign-place rule. The
+     * rule was right to look and wrong to conclude: the fix is to take the
+     * company name out of the text before scanning it, not to stop naming who
+     * takes the money.
+     */
+    const scanned = text.replaceAll(COMPANY_NAME, "the company");
     for (const place of KNOWN_PLACES) {
-      if (!text.includes(place)) continue;
+      if (!scanned.includes(place)) continue;
       if (allowed.has(place)) continue;
       fail(
         id,
@@ -1216,7 +1494,7 @@ for (const d of departures) {
 
   for (const [role, mention, lineId] of STAFF_ROLES) {
     const funded = d.costSheet.lines.some(
-      (line) => line.included && line.id === lineId,
+      (line) => line.disposition === "provided" && line.id === lineId,
     );
     if (funded) continue;
     for (const [where, text] of rendered) {
@@ -1681,6 +1959,43 @@ for (const [theme, set, band] of [
       "section",
       "flat-zones",
       `${theme} --band-sunk matches the trust band — the two sections read as one surface`,
+    );
+  }
+}
+
+/* --------------------------------------------------------- permit records */
+
+/*
+ * Coherence rules for the permit table itself.
+ *
+ * These are about the records, not about any departure, so they run once. A
+ * window that ends before it starts silently matches nothing, and a record
+ * marked superseded with nothing named as its successor is a dead end for
+ * whoever has to work out what replaced it.
+ */
+for (const permit of PERMITS) {
+  if (permit.effectiveUntil && permit.effectiveUntil < permit.effectiveFrom) {
+    fail(
+      permit.id,
+      "permit-bad-window",
+      `effectiveUntil ${permit.effectiveUntil} precedes effectiveFrom ${permit.effectiveFrom}, so this record matches nothing`,
+    );
+  }
+  if (permit.status === "superseded" && !permit.supersededBy) {
+    fail(
+      permit.id,
+      "permit-superseded-orphan",
+      "is superseded but does not name what replaced it",
+    );
+  }
+  if (
+    permit.supersededBy &&
+    !PERMITS.some((p) => p.id === permit.supersededBy)
+  ) {
+    fail(
+      permit.id,
+      "permit-superseded-orphan",
+      `names "${permit.supersededBy}" as its successor, which is not a record`,
     );
   }
 }
