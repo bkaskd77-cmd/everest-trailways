@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 
+import { isApproved, policyById } from "@/content/policies";
+
 import {
   DocSectionBlock,
   DocumentPage,
@@ -11,14 +13,28 @@ import {
   providedLines,
 } from "@/content/departures";
 
+/**
+ * `noindex` while the policy is unapproved.
+ *
+ * Read from the registry rather than typed, so approving the document is one
+ * edit in one file and the page follows. `follow` stays on: the links out of a
+ * draft are still worth following, and nofollow would strand it rather than
+ * de-list it.
+ */
+const policyIsApproved = (id: string) => {
+  const p = policyById(id);
+  return Boolean(p && isApproved(p));
+};
+
 export const metadata: Metadata = {
   title: "How we price",
   description:
     "What all-in means, what it excludes, why the same route costs different amounts on different dates, what the reserves fund, and what our fee is as a share of the price.",
+  robots: policyIsApproved("pricing")
+    ? { index: true, follow: true }
+    : { index: false, follow: true },
   alternates: { canonical: "/pricing" },
 };
-
-const LAST_REVIEWED = "2026-08-23";
 
 /**
  * The methodology behind every cost sheet.
@@ -54,7 +70,7 @@ export default function PricingPage() {
     <DocumentPage
       eyebrow="Pricing"
       title="How the number on every page is arrived at."
-      lastReviewed={LAST_REVIEWED}
+      policyId="pricing"
       sections={[
         { id: "all-in", title: "What all-in means" },
         { id: "sums", title: "The lines must sum exactly" },

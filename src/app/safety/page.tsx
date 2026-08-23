@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 
+import { isApproved, policyById } from "@/content/policies";
+
 import {
   DocSectionBlock,
   DocumentPage,
@@ -21,14 +23,28 @@ import {
 } from "@/content/safety";
 import { departures } from "@/content/departures";
 
+/**
+ * `noindex` while the policy is unapproved.
+ *
+ * Read from the registry rather than typed, so approving the document is one
+ * edit in one file and the page follows. `follow` stays on: the links out of a
+ * draft are still worth following, and nofollow would strand it rather than
+ * de-list it.
+ */
+const policyIsApproved = (id: string) => {
+  const p = policyById(id);
+  return Boolean(p && isApproved(p));
+};
+
 export const metadata: Metadata = {
   title: "Safety",
   description:
     "Guide ratios by altitude, the certification each band requires, the descent rule, acclimatisation, rescue coordination, porter welfare — and what we do not do.",
+  robots: policyIsApproved("safety")
+    ? { index: true, follow: true }
+    : { index: false, follow: true },
   alternates: { canonical: "/safety" },
 };
-
-const LAST_REVIEWED = "2026-08-23";
 
 /**
  * Safety as a table, not as reassurance.
@@ -52,7 +68,7 @@ export default function SafetyPage() {
     <DocumentPage
       eyebrow="Safety"
       title="What we do, how it is staffed, and what we cannot do."
-      lastReviewed={LAST_REVIEWED}
+      policyId="safety"
       sections={[
         { id: "ratios", title: "Ratios and certification" },
         { id: "catalogue", title: "Every departure, by band" },

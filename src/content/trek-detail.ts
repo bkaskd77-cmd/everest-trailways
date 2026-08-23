@@ -30,6 +30,7 @@
 
 import type { Departure } from "./departures.ts";
 import { lineAmount, payableOnArrival } from "./cost-sheets.ts";
+import { citationFor } from "./policies.ts";
 import type { Focal } from "../lib/image-slots.ts";
 
 export type GalleryImage = {
@@ -723,7 +724,7 @@ export function buildFaqs(d: Departure): Faq[] {
     },
     {
       question: "What happens to my money if I cancel?",
-      answer: `Our cancellation terms are published in full and not summarised here in a way that could differ from them. What is specific to this date: if we cancel because the departure does not reach ${d.minimumToRun} bookings by ${d.decisionDate}, you get the full ${money(d.priceUSD)} back — the whole amount you paid us, not a credit note — or you move to another date at the same price. If you cancel, the amount you get back depends on how close to departure it is, because the permits and flights are bought in advance and are not refundable to us either.`,
+      answer: `${citationFor("cancellation").sentence} What is specific to this date: if we cancel because the departure does not reach ${d.minimumToRun} bookings by ${d.decisionDate}, you get the full ${money(d.priceUSD)} back — the whole amount you paid us, not a credit note — or you move to another date at the same price. If you cancel, the amount you get back depends on how close to departure it is, because the permits and flights are bought in advance and are not refundable to us either.`,
     },
     {
       question: "What happens if the departure does not fill?",

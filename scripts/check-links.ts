@@ -20,6 +20,7 @@ import path from "node:path";
 
 import { departures } from "../src/content/departures.ts";
 import { TREK_PAGES } from "../src/content/trek-pages.ts";
+import { ACTIVITIES } from "../src/content/activities.ts";
 
 /** Region slugs, generated the same way the page generates them. */
 const REGION_SLUGS = [...new Set(TREK_PAGES.map((t) => t.region))]
@@ -93,6 +94,8 @@ for (const route of dynamicRoutes) {
     }
   } else if (pattern === "/treks/[slug]") {
     for (const t of TREK_PAGES) generated.add(`/treks/${t.slug}`);
+  } else if (pattern === "/activities/[slug]") {
+    for (const a of ACTIVITIES) generated.add(`/activities/${a.slug}`);
   } else if (pattern === "/regions/[slug]") {
     for (const region of REGION_SLUGS) generated.add(`/regions/${region}`);
   } else {
@@ -142,7 +145,9 @@ for (const file of sourceFiles) {
       ? TREK_PAGES[0].slug
       : raw.startsWith("/regions/")
         ? REGION_SLUGS[0]
-        : departures[0].slug;
+        : raw.startsWith("/activities/")
+          ? ACTIVITIES[0].slug
+          : departures[0].slug;
     const href = raw.replace(/\$\{[^}]+\}/g, sample);
     found.push({ href, source: rel, line: at(match.index) });
   }

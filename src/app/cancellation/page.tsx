@@ -1,15 +1,33 @@
 import type { Metadata } from "next";
 
+import { isApproved, policyById } from "@/content/policies";
+
 import {
   DocSectionBlock,
   DocumentPage,
 } from "@/components/trust/document-page";
 import { CANCELLATION_TERMS } from "@/content/cancellation";
 
+/**
+ * `noindex` while the policy is unapproved.
+ *
+ * Read from the registry rather than typed, so approving the document is one
+ * edit in one file and the page follows. `follow` stays on: the links out of a
+ * draft are still worth following, and nofollow would strand it rather than
+ * de-list it.
+ */
+const policyIsApproved = (id: string) => {
+  const p = policyById(id);
+  return Boolean(p && isApproved(p));
+};
+
 export const metadata: Metadata = {
   title: "Cancellation and refunds",
   description:
     "What happens if we cancel, what happens if you cancel, what is non-refundable and why, transfers, refund method and timeline, force majeure, and leaving mid-trek.",
+  robots: policyIsApproved("cancellation")
+    ? { index: true, follow: true }
+    : { index: false, follow: true },
   alternates: { canonical: "/cancellation" },
 };
 
@@ -37,7 +55,7 @@ export default function CancellationPage() {
     <DocumentPage
       eyebrow="Cancellation"
       title="If we cancel, and if you do."
-      lastReviewed={t.lastReviewed}
+      policyId="cancellation"
       sections={[
         { id: "we-cancel", title: "If we cancel" },
         { id: "you-cancel", title: "If you cancel" },

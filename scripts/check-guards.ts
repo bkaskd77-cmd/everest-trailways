@@ -13,7 +13,7 @@
  * There are two halves to this file, and they answer different questions.
  *
  * THE LEDGER reads every guard in `scripts/` and extracts the name of every
- * assertion it can emit — currently two hundred of them. Each one must
+ * assertion it can emit — currently two hundred and twenty of them. Each one must
  * then be accounted for: either a mutation below proves it fires, or it is
  * written into UNPROVEN with a reason. An assertion in neither list fails this
  * command. That is the part that holds over time: a rule cannot be added to
@@ -28,7 +28,7 @@
  *
  * What this file deliberately does not claim: that the unproven assertions are
  * working. They are unproven. The count is printed every run rather than
- * rounded off, because a number that says "27 of 200" is doing its job and a
+ * rounded off, because a number that says "37 of 221" is doing its job and a
  * green tick that says "all guards verified" would be the third broken guard.
  *
  * Deliberately not run inside `pnpm build`: it rewrites source files, and a
@@ -383,6 +383,132 @@ const MUTATIONS: Mutation[] = [
       ),
     expect: "scale-not-monotonic",
   },
+
+  /* ---------------------------------- step 11: policies and activities */
+
+  {
+    /*
+     * The rule the whole policy lifecycle exists for. Selling a trip on top of
+     * a refund policy that is admittedly invented is not a thing anybody
+     * decides to do — it is a thing that happens because a payment integration
+     * lands on a Friday.
+     */
+    name: "booking switched on over a draft refund policy",
+    guard: "check-policies.ts",
+    file: "src/lib/capabilities.ts",
+    break: (s) =>
+      s.replace(
+        "export const BOOKING_ENABLED = false;",
+        "export const BOOKING_ENABLED = true;",
+      ),
+    expect: "booking-on-a-draft-policy",
+  },
+  {
+    name: "a draft policy listed in the sitemap",
+    guard: "check-policies.ts",
+    file: "src/app/sitemap.ts",
+    break: (s) => s.replace("POLICIES.filter(isApproved)", "POLICIES.slice()"),
+    expect: "sitemap-lists-drafts",
+  },
+  {
+    // The FAQ pointing at a draft as though it were settled.
+    name: "a page citing a draft policy as authoritative",
+    guard: "check-policies.ts",
+    file: "src/content/trek-detail.ts",
+    break: (s) =>
+      s.replace(
+        '${citationFor("cancellation").sentence}',
+        "Our cancellation terms are published in full and not summarised here in a way that could differ from them.",
+      ),
+    expect: "cites-a-draft-as-settled",
+  },
+  {
+    name: "a draft policy left indexable",
+    guard: "check-policies.ts",
+    file: "src/app/cancellation/page.tsx",
+    /*
+     * The gate has to be removed, not renamed. The first version of this
+     * mutation replaced the call with `policyIsApproved2(`, which still
+     * contained the string the guard searches for — so the guard passed and
+     * the mutation proved nothing.
+     */
+    break: (s) =>
+      s.replace(
+        /robots: policyIsApproved\([^)]*\)[\s\S]*?\{ index: false, follow: true \},/,
+        "robots: { index: true, follow: true },",
+      ),
+    expect: "index-not-gated",
+  },
+  {
+    /*
+     * The distinction activities exist for. A minimum-to-run sentence on a
+     * product with no minimum describes a mechanism we do not operate.
+     */
+    name: "guarantee language on a product with no guarantee",
+    guard: "check-activities.ts",
+    file: "src/content/activities.ts",
+    break: (s) =>
+      s.replace(
+        "There is no minimum group and no date to fill",
+        "There is a minimum to run and a decision date",
+      ),
+    expect: "guarantee-language-without-a-guarantee",
+  },
+  {
+    name: "a from-price that only applies to a big group",
+    guard: "check-activities.ts",
+    file: "src/content/activities.ts",
+    break: (s) =>
+      s.replace(
+        "      { participants: 2, priceUSD: 95 },",
+        "      { participants: 2, priceUSD: 60 },",
+      ),
+    expect: "price-scaling-mismatch",
+  },
+  {
+    name: "a weather-cancelled activity with nothing said about refunds",
+    guard: "check-activities.ts",
+    file: "src/content/activities.ts",
+    break: (s) =>
+      s.replace(
+        /trigger: `Conditions make \$\{what\} unsafe on the day`,/,
+        "trigger: `Something about ${what}`,",
+      ),
+    expect: "weather-without-contingency",
+  },
+  {
+    name: "an activity pairing with a trek that does not exist",
+    guard: "check-activities.ts",
+    file: "src/content/activities.ts",
+    break: (s) =>
+      s.replace(
+        'combinesWith: ["chitwan-safari", "kathmandu-valley-rim"],',
+        'combinesWith: ["chitwan-safari", "kathmandu-valley-rimm"],',
+      ),
+    expect: "combines-with-unknown-trek",
+  },
+  {
+    name: "a scheduled activity pointing at no real date",
+    guard: "check-activities.ts",
+    file: "src/content/activities.ts",
+    break: (s) =>
+      s.replace(
+        'availability: { mode: "scheduled", departures: ["ebc-2027-03-22"] },',
+        'availability: { mode: "scheduled", departures: ["ebc-2099-01-01"] },',
+      ),
+    expect: "scheduled-without-dates",
+  },
+  {
+    name: "the guarantee machinery imported onto an activity page",
+    guard: "check-activities.ts",
+    file: "src/app/activities/[slug]/page.tsx",
+    break: (s) =>
+      s.replace(
+        "const money = (n: number)",
+        "const GlanceBar = null;\nvoid GlanceBar;\nconst money = (n: number)",
+      ),
+    expect: "guarantee-component-on-an-activity",
+  },
 ];
 
 /* -------------------------------------------------------------- the ledger */
@@ -480,6 +606,18 @@ for (const rule of [
   "incoherent-archive",
   "no-permits",
   "map-too-cramped",
+  /* Step 11 siblings, on the same code path as a mutated rule above. */
+  "bad-availability",
+  "combines-with-nothing",
+  "combines-with-not-reciprocal",
+  "approved-without-approver",
+  "unapproved-with-approver",
+  "draft-without-reason",
+  "approval-predates-review",
+  "citation-state-mismatch",
+  "banner-not-wired",
+  "missing-page",
+  "no-sitemap",
   /*
    * Step 10 siblings: each shares a code path with a rule that IS mutated
    * above, so the path is exercised and the specific branch is not.

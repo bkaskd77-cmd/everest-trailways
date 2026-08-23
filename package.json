@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "pnpm check:departures && pnpm check:treks && pnpm check:documents && pnpm check:trust && pnpm check:matcher && pnpm check:motion && pnpm check:links && pnpm check:security && pnpm check:images && next build",
+    "build": "pnpm check:departures && pnpm check:treks && pnpm check:documents && pnpm check:activities && pnpm check:policies && pnpm check:trust && pnpm check:matcher && pnpm check:motion && pnpm check:links && pnpm check:security && pnpm check:images && next build",
     "perf": "pnpm check:motion && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/measure-perf.ts",
     "start": "next start",
     "lint": "eslint",
@@ -18,6 +18,8 @@
     "tune:hero": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-hero-contrast.ts --tune",
     "check:trust": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-trust.ts",
     "check:departures": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-departures.ts",
+    "check:activities": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-activities.ts",
+    "check:policies": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-policies.ts",
     "check:documents": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-documents.ts",
     "check:treks": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-treks.ts",
     "check:matcher": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-matcher.ts",

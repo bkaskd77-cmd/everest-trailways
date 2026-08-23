@@ -126,6 +126,18 @@ const PAGES: {
     screens: 30,
   },
   {
+    name: "index /activities",
+    path: "/activities",
+    answersMatcher: false,
+    screens: 24,
+  },
+  {
+    name: "activity /trishuli-day-rafting",
+    path: "/activities/trishuli-day-rafting",
+    answersMatcher: false,
+    screens: 24,
+  },
+  {
     name: "trek /treks/everest-base-camp",
     path: "/treks/everest-base-camp",
     answersMatcher: false,
@@ -166,12 +178,19 @@ const PAGES: {
 const JS_BUDGET: { match: RegExp; budget: number; note: string }[] = [
   {
     match:
-      /^\/(licences|safety|pricing|cancellation|about|journal|activities|regions)/,
+      /*
+       * `activities` is deliberately NOT here any more. It was, from when the
+       * page was a stub with no client component — and because this rule is
+       * matched first, the filtered activities index would have been held to
+       * the 280 KB document budget and failed for doing its job. Order matters
+       * in this table, so a prefix that has grown a filter has to leave it.
+       */
+      /^\/(licences|safety|pricing|cancellation|about|journal|regions)/,
     budget: 280,
     note: "static document — no client component of its own",
   },
   {
-    match: /^\/(departures|treks)$/,
+    match: /^\/(departures|treks|activities)$/,
     budget: 310,
     note: "filtered index — useSearchParams and the filter UI",
   },
@@ -184,6 +203,11 @@ const JS_BUDGET: { match: RegExp; budget: number; note: string }[] = [
     match: /^\/treks\//,
     budget: 310,
     note: "trek page — month table stagger, no filters",
+  },
+  {
+    match: /^\/activities\//,
+    budget: 310,
+    note: "activity page — no guarantee block, no slider",
   },
   { match: /^\/$/, budget: 320, note: "homepage — matcher and hero" },
 ];

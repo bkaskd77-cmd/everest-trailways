@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { JsonLd } from "@/components/json-ld";
 import { Reveal } from "@/components/motion";
+import { isApproved, policyById } from "@/content/policies";
 import { siteConfig } from "@/lib/site";
 
 /**
@@ -24,7 +25,7 @@ export function DocumentPage({
   eyebrow,
   title,
   intro,
-  lastReviewed,
+  policyId,
   sections,
   children,
   pending,
@@ -32,17 +33,25 @@ export function DocumentPage({
   eyebrow: string;
   title: string;
   intro: React.ReactNode;
-  /** ISO date. Rendered, not hidden. */
-  lastReviewed: string;
+  /** Looked up in the policy registry for its review state and date. */
+  policyId: string;
   sections: DocSection[];
   children: React.ReactNode;
   /** Shown at the top when the document carries unverified placeholders. */
   pending?: React.ReactNode;
 }) {
-  const reviewed = new Date(`${lastReviewed}T00:00:00Z`).toLocaleDateString(
-    "en-GB",
-    { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" },
-  );
+  const policy = policyById(policyId);
+  const lastReviewed = policy?.lastReviewed ?? "1970-01-01";
+  const approved = policy ? isApproved(policy) : false;
+
+  const date = (iso: string) =>
+    new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+  const reviewed = date(lastReviewed);
 
   return (
     <main className="bg-band-sunk">
@@ -75,7 +84,50 @@ export function DocumentPage({
             {reviewed}
           </time>
           .
+          {approved && policy?.approvedBy && policy.approvedOn && (
+            <>
+              {" "}
+              Approved by {policy.approvedBy} on{" "}
+              <time dateTime={policy.approvedOn} className="tabular">
+                {date(policy.approvedOn)}
+              </time>
+              .
+            </>
+          )}
         </p>
+
+        {/*
+          The banner an unapproved document must carry.
+          Not a note in a comment and not a line in a commit message — both of
+          those protect nobody. A draft that binds the company has to say so on
+          the page, above everything else on it, in a colour that stops a
+          reader treating the table below as a term.
+        */}
+        {policy && !approved && (
+          <div
+            role="note"
+            className="mt-8 max-w-[70ch] rounded-lg border-2 border-prayer bg-prayer/10 p-5"
+          >
+            <p className="text-xs tracking-[0.18em] text-prayer-deep uppercase">
+              {policy.reviewStatus === "legal-review"
+                ? "With legal — not yet approved"
+                : "Draft — not yet approved"}
+            </p>
+            <p className="mt-3 text-sm">
+              <strong>
+                This document is a draft. It does not bind anyone, including us,
+                and nothing on it is an offer or a term.
+              </strong>{" "}
+              {policy.note}
+            </p>
+            <p className="mt-3 text-sm text-muted-foreground">
+              It is published in this state deliberately rather than hidden, so
+              that what we intend can be read and argued with before it is
+              settled. It is excluded from search and from our sitemap until it
+              is approved.
+            </p>
+          </div>
+        )}
 
         {pending && (
           <div className="mt-8 max-w-[70ch] rounded-lg border border-prayer/40 bg-prayer/5 p-5 text-sm print:hidden">

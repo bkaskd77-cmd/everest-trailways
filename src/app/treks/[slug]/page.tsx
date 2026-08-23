@@ -17,6 +17,7 @@ import {
   seatsRemaining,
 } from "@/content/departures";
 import { TREK_PAGES, trekBySlug } from "@/content/trek-pages";
+import { activitiesForTrek } from "@/content/activities";
 import {
   bookableFor,
   cancelledFor,
@@ -570,6 +571,62 @@ export default async function TrekPage({
             </div>
           </div>
         </section>
+
+        {/* 9b — ACTIVITIES THAT PAIR WITH THIS TREK.
+               The reciprocal of an activity's `combinesWith`; the guard fails
+               if the two disagree, so neither side can be edited alone. */}
+        {activitiesForTrek(trek.id).length > 0 && (
+          <section
+            aria-labelledby="pairs-heading"
+            className="border-t border-border bg-band py-16 lg:py-20"
+          >
+            <div className="shell">
+              <SectionHead
+                eyebrow="Alongside"
+                id="pairs-heading"
+                title="Things that fit either side of this trek."
+              >
+                <p>
+                  Run on demand or in season rather than as fixed departures, so
+                  they slot around a trek instead of competing with it for a
+                  date.
+                </p>
+              </SectionHead>
+
+              <StaggerGroup as="ul" className="mt-10 grid gap-3">
+                {activitiesForTrek(trek.id).map((a) => (
+                  <Reveal as="li" key={a.id}>
+                    <Link
+                      href={`/activities/${a.slug}`}
+                      className="group flex items-center justify-between gap-4 rounded-lg border border-border bg-card p-5 transition-colors hover:border-foreground/25"
+                    >
+                      <span>
+                        <span className="font-display text-lg tracking-tight">
+                          {a.name}
+                        </span>
+                        <span className="mt-1 block tabular text-sm text-muted-foreground">
+                          {a.durationDays
+                            ? `${a.durationDays} days`
+                            : `${a.durationHours} hours`}{" "}
+                          · from ${a.priceUSD.toLocaleString("en-GB")} ·{" "}
+                          {a.availability.mode === "on-demand"
+                            ? "on demand"
+                            : a.availability.mode === "seasonal-window"
+                              ? "in season"
+                              : "fixed dates"}
+                        </span>
+                      </span>
+                      <ArrowRight
+                        aria-hidden
+                        className="size-4 shrink-0 transition-transform group-hover:translate-x-1"
+                      />
+                    </Link>
+                  </Reveal>
+                ))}
+              </StaggerGroup>
+            </div>
+          </section>
+        )}
 
         {/* 10 — CLOSE */}
         <section className="border-t border-border py-16 lg:py-24">

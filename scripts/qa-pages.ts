@@ -39,6 +39,7 @@ import puppeteer, { type Browser } from "puppeteer";
 
 import { departures } from "../src/content/departures.ts";
 import { TREK_PAGES } from "../src/content/trek-pages.ts";
+import { ACTIVITIES } from "../src/content/activities.ts";
 
 const root = process.cwd();
 
@@ -73,6 +74,7 @@ const ROUTES = [
   "/pricing",
   "/safety",
   ...TREK_PAGES.map((t) => `/treks/${t.slug}`),
+  ...ACTIVITIES.map((a) => `/activities/${a.slug}`),
   ...regionSlugs.map((r) => `/regions/${r}`),
   ...departures.map((d) => `/departures/${d.slug}`),
 ];

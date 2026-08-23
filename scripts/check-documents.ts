@@ -27,6 +27,7 @@ import {
 } from "../src/content/cancellation.ts";
 import { CERTIFICATION_TIERS } from "../src/content/certification.ts";
 import { CREDENTIALS } from "../src/content/credentials.ts";
+import { POLICIES } from "../src/content/policies.ts";
 import {
   RATIO_BANDS,
   WHAT_WE_DO_NOT_DO,
@@ -202,11 +203,25 @@ for (const file of REQUIRED_PAGES) {
       "does not use the shared document template, so it has no visible review date, no contents and no print stylesheet",
     );
   }
-  if (!/lastReviewed/.test(source)) {
+  /*
+   * The review date moved into the policy registry in step 11, so the page no
+   * longer carries it — it names a policy and the template reads the date.
+   * The rule follows: the page must name a policy, and that policy must have a
+   * date. Left as it was, this would have failed every document for not
+   * containing a string that is correctly no longer there.
+   */
+  const named = source.match(/policyId="([a-z-]+)"/);
+  if (!named) {
     fail(
       file,
       "no-review-date",
-      "carries no lastReviewed date — a trust document that will not say when it was last checked is asking to be believed about that too",
+      "names no policy, so the template has no review state or date to render",
+    );
+  } else if (!POLICIES.find((p) => p.id === named[1])?.lastReviewed) {
+    fail(
+      file,
+      "no-review-date",
+      `names policy "${named[1]}", which has no lastReviewed date — a trust document that will not say when it was last checked is asking to be believed about that too`,
     );
   }
 }

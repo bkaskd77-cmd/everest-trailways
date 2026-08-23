@@ -1,19 +1,35 @@
 import type { Metadata } from "next";
 
+import { isApproved, policyById } from "@/content/policies";
+
 import {
   DocSectionBlock,
   DocumentPage,
 } from "@/components/trust/document-page";
 import { CREDENTIALS, verifiedCount } from "@/content/credentials";
 
+/**
+ * `noindex` while the policy is unapproved.
+ *
+ * Read from the registry rather than typed, so approving the document is one
+ * edit in one file and the page follows. `follow` stays on: the links out of a
+ * draft are still worth following, and nofollow would strand it rather than
+ * de-list it.
+ */
+const policyIsApproved = (id: string) => {
+  const p = policyById(id);
+  return Boolean(p && isApproved(p));
+};
+
 export const metadata: Metadata = {
   title: "Licences and registrations",
   description:
     "Every licence, registration, membership and policy we hold, what each one actually establishes, what it does not, and how to check it without asking us.",
+  robots: policyIsApproved("licences")
+    ? { index: true, follow: true }
+    : { index: false, follow: true },
   alternates: { canonical: "/licences" },
 };
-
-const LAST_REVIEWED = "2026-08-23";
 
 /**
  * What we hold, and what it is worth.
@@ -35,7 +51,7 @@ export default function LicencesPage() {
     <DocumentPage
       eyebrow="Licences"
       title="What we hold, and what it proves."
-      lastReviewed={LAST_REVIEWED}
+      policyId="licences"
       sections={[
         { id: "state", title: "The state of this page" },
         ...CREDENTIALS.map((c) => ({ id: c.id, title: c.name })),
