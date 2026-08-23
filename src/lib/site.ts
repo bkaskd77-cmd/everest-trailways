@@ -13,7 +13,7 @@ export const primaryNav = [
   { label: "Activities", href: "/activities" },
   { label: "Regions", href: "/regions" },
   { label: "About", href: "/about" },
-  { label: "Journal", href: "/journal" },
+  { label: "Contact", href: "/contact" },
 ] as const;
 
 export const footerNav = {
@@ -22,6 +22,8 @@ export const footerNav = {
     { label: "Activities", href: "/activities" },
     { label: "Regions", href: "/regions" },
     { label: "Journal", href: "/journal" },
+    { label: "The team", href: "/team" },
+    { label: "Contact", href: "/contact" },
   ],
   trust: [
     { label: "Our Licences", href: "/licences" },

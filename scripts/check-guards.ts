@@ -13,7 +13,7 @@
  * There are two halves to this file, and they answer different questions.
  *
  * THE LEDGER reads every guard in `scripts/` and extracts the name of every
- * assertion it can emit — currently two hundred and twenty of them. Each one must
+ * assertion it can emit — currently two hundred and twenty-six. Each one must
  * then be accounted for: either a mutation below proves it fires, or it is
  * written into UNPROVEN with a reason. An assertion in neither list fails this
  * command. That is the part that holds over time: a rule cannot be added to
@@ -28,7 +28,7 @@
  *
  * What this file deliberately does not claim: that the unproven assertions are
  * working. They are unproven. The count is printed every run rather than
- * rounded off, because a number that says "37 of 221" is doing its job and a
+ * rounded off, because a number that says "41 of 226" is doing its job and a
  * green tick that says "all guards verified" would be the third broken guard.
  *
  * Deliberately not run inside `pnpm build`: it rewrites source files, and a
@@ -499,15 +499,109 @@ const MUTATIONS: Mutation[] = [
     expect: "scheduled-without-dates",
   },
   {
-    name: "the guarantee machinery imported onto an activity page",
+    name: "the guarantee machinery rendered on an activity page",
     guard: "check-activities.ts",
     file: "src/app/activities/[slug]/page.tsx",
+    /*
+     * Rendered, not declared. The first version inserted
+     * `const GlanceBar = null`, which the strengthened guard correctly ignores
+     * — a declaration is not a use. The mutation had to become a real one
+     * before it could prove anything, which is the whole part 0 lesson
+     * appearing in the test of itself.
+     */
     break: (s) =>
       s.replace(
-        "const money = (n: number)",
-        "const GlanceBar = null;\nvoid GlanceBar;\nconst money = (n: number)",
+        "        {/* 2 — SUMMARY */}",
+        "        <GlanceBar />\n        {/* 2 — SUMMARY */}",
       ),
     expect: "guarantee-component-on-an-activity",
+  },
+
+  /* -------------------------------------- step 12: guides as a roster */
+
+  {
+    /*
+     * The rule that could not exist while a guide was a field on a departure:
+     * one person, two overlapping trips. Not a data-entry curiosity — a trip
+     * that arrives at the trailhead without a guide, discovered on the day.
+     */
+    name: "one guide assigned to two overlapping trips",
+    guard: "check-departures.ts",
+    file: "src/content/guides.ts",
+    break: (s) =>
+      s.replace(
+        "export const ASSIGNED_GUIDES: Record<string, string[]> = {};",
+        [
+          "export const ASSIGNED_GUIDES: Record<string, string[]> = {",
+          '  "bardia-2026-11-16": ["guide-placeholder-1"],',
+          '  "langtang-2026-11-21": ["guide-placeholder-1"],',
+          "};",
+        ].join("\n"),
+      ),
+    expect: "guide-double-booked",
+  },
+  {
+    /*
+     * A certificate valid the morning you fly and expired by the time you are
+     * at 5,000 m. Checked against `returnsOn`, which is the whole point.
+     */
+    name: "a qualification that lapses mid-trek",
+    guard: "check-departures.ts",
+    file: "src/content/guides.ts",
+    /*
+     * Assigns and expires in one edit, which only became possible once the
+     * assignment map moved into this file. It is also the honest shape of the
+     * failure: nobody sets an expiry in the past on purpose — they assign
+     * somebody whose certificate happens to run out during the trip.
+     */
+    break: (s) =>
+      s
+        .replace(
+          /certificationLevel: "PLACEHOLDER Tier 3",(\s+)wildernessFirstAid:/,
+          'certificationLevel: "PLACEHOLDER Tier 3",$1certificationExpiresOn: "2020-01-01",$1wildernessFirstAid:',
+        )
+        .replace(
+          "export const ASSIGNED_GUIDES: Record<string, string[]> = {};",
+          [
+            "export const ASSIGNED_GUIDES: Record<string, string[]> = {",
+            '  "ebc-2026-10-14": ["guide-placeholder-1"],',
+            "};",
+          ].join("\n"),
+        ),
+    expect: "qualification-expires-mid-trip",
+  },
+  {
+    name: "a guide holding a certification tier nobody defines",
+    guard: "check-departures.ts",
+    file: "src/content/guides.ts",
+    break: (s) =>
+      s.replace(
+        'certificationLevel: "PLACEHOLDER Tier 1",',
+        'certificationLevel: "PLACEHOLDER Tier 9",',
+      ),
+    expect: "unknown-certification-tier",
+  },
+  {
+    name: "a licence number published on a pending record",
+    guard: "check-departures.ts",
+    file: "src/content/guides.ts",
+    break: (s) => s.replace('licenceNumber: "—",', 'licenceNumber: "TG-4471",'),
+    expect: "unverified-licence-number",
+  },
+  {
+    /*
+     * Part 0's fixture in mutation form: the reader itself, weakened back to
+     * the shape that let an import satisfy a rule twice.
+     */
+    name: "a source reader satisfied by a declaration again",
+    guard: "check-source-rules.ts",
+    file: "scripts/lib/source.ts",
+    break: (s) =>
+      s.replace(
+        "export function executable(source: string): string {",
+        "export function executable(source: string): string {\n  return source;",
+      ),
+    expect: "FAIL",
   },
 ];
 
@@ -606,6 +700,9 @@ for (const rule of [
   "incoherent-archive",
   "no-permits",
   "map-too-cramped",
+  /* Step 12 siblings, on the same code path as a mutated rule above. */
+  "unknown-guide",
+  "understaffed-for-ratio",
   /* Step 11 siblings, on the same code path as a mutated rule above. */
   "bad-availability",
   "combines-with-nothing",

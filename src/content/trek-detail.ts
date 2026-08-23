@@ -31,6 +31,7 @@
 import type { Departure } from "./departures.ts";
 import { lineAmount, payableOnArrival } from "./cost-sheets.ts";
 import { citationFor } from "./policies.ts";
+import { guidesByIds } from "./guides.ts";
 import type { Focal } from "../lib/image-slots.ts";
 
 export type GalleryImage = {
@@ -663,6 +664,7 @@ export function buildFaqs(d: Departure): Faq[] {
     (line) => line.disposition === "provided" && line.id === "staff-porter",
   );
   /* The same source the cost sheet reads, so the two cannot disagree. */
+  const assignedGuides = guidesByIds(d.guideRequirement.assignedGuideIds);
   const onArrival = payableOnArrival(d.costSheet);
   const onArrivalTotal = onArrival.reduce((sum, l) => sum + lineAmount(l), 0);
 
@@ -706,7 +708,21 @@ export function buildFaqs(d: Departure): Faq[] {
     },
     {
       question: "Who is my guide, and can I see their licence?",
-      answer: `You are told your guide's name and licence number once the departure is guaranteed, and you can ask for it earlier. Every guide on this trip holds a current Nepal Academy of Tourism and Hotel Management licence and a wilderness first aid certificate, both of which we will show you. This departure runs at ${d.guideRatio}${d.assistantGuideAbove ? `, with a second guide above ${d.assistantGuideAbove.toLocaleString("en-GB")} m` : ""}.`,
+      /*
+       * Composed from the roster rather than promised in general.
+       *
+       * This used to assert that every guide holds a named licence and a
+       * first-aid certificate — a claim about people the site could not show
+       * you, on a question that exists precisely because the reader wants to
+       * check. It now says what is actually true of this date: the requirement
+       * the altitude sets, whether anybody is assigned yet, and where the
+       * roster is.
+       */
+      answer: `${
+        assignedGuides.length
+          ? `${assignedGuides.map((g) => g.name).join(" and ")} ${assignedGuides.length === 1 ? "is" : "are"} assigned to this date. Their licence ${assignedGuides.length === 1 ? "number is" : "numbers are"} on the team page with the issuing body, so you can check ${assignedGuides.length === 1 ? "it" : "them"} against the register rather than against us.`
+          : "No guide is assigned to this date yet — we name them once the departure is guaranteed, and you can ask earlier."
+      } This route reaches ${d.maxAltitudeM.toLocaleString("en-GB")} m, so the guide must hold a certification valid to at least that altitude: ${d.guideRequirement.certificationLevel}. The departure runs at ${d.guideRatio}${d.assistantGuideAbove ? `, with a second guide above ${d.assistantGuideAbove.toLocaleString("en-GB")} m` : ""}. Every guide we have on the books is listed on the team page with their certification, their first-aid expiry, and whether we have verified either.`,
     },
     {
       question: "Can I have a single room, and what does it cost?",

@@ -16,13 +16,14 @@
  */
 
 import { readFile } from "node:fs/promises";
+
+import { callsFunction, rendersComponent } from "./lib/source.ts";
 import path from "node:path";
 
 import { BANNED_ADJECTIVES } from "../src/content/trust-points.ts";
 import { PLACES } from "../src/content/places.ts";
 import {
   ACTIVITIES,
-  type Activity,
   availabilitySentence,
   hasGuarantee,
 } from "../src/content/activities.ts";
@@ -432,7 +433,14 @@ for (const banned of [
   "seatsToGuarantee",
   "guaranteeMeta",
 ]) {
-  if (pageSource.includes(banned)) {
+  /*
+   * Rendered or called, not merely mentioned. The old check fired on the
+   * comment explaining why these are absent — a rule that punishes the
+   * documentation of its own reason is a rule people delete.
+   */
+  const used =
+    rendersComponent(pageSource, banned) || callsFunction(pageSource, banned);
+  if (used) {
     fail(
       "activity-page",
       "guarantee-component-on-an-activity",

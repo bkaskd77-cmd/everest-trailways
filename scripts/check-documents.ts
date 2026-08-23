@@ -19,6 +19,8 @@
  */
 
 import { readFile } from "node:fs/promises";
+
+import { rendersComponent } from "./lib/source.ts";
 import path from "node:path";
 
 import {
@@ -196,7 +198,12 @@ for (const file of REQUIRED_PAGES) {
     fail(file, "missing-document", "does not exist");
     continue;
   }
-  if (!source.includes("DocumentPage")) {
+  /*
+   * Rendered, not imported. `import { DocumentPage }` left behind after the
+   * page stopped using it satisfied the old check, which would have passed a
+   * trust document with no review date, no contents and no print styles.
+   */
+  if (!rendersComponent(source, "DocumentPage")) {
     fail(
       file,
       "not-a-document",

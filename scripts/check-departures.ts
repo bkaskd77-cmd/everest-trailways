@@ -14,6 +14,8 @@
  */
 
 import { readFile } from "node:fs/promises";
+
+import { callsFunction } from "./lib/source.ts";
 import path from "node:path";
 
 import { BANNED_ADJECTIVES } from "../src/content/trust-points.ts";
@@ -41,6 +43,12 @@ import {
   providedLines,
 } from "../src/content/departures.ts";
 import { CERTIFICATION_TIERS } from "../src/content/certification.ts";
+import {
+  GUIDES,
+  guideById,
+  guidesByIds,
+  validOn,
+} from "../src/content/guides.ts";
 import { PERMITS, permitsFor } from "../src/content/permits.ts";
 import { trekById } from "../src/content/trek-pages.ts";
 import {
@@ -780,8 +788,19 @@ for (const d of departures) {
     );
   }
 
-  const guide = requirement.assignedGuide;
-  if (guide) {
+  /*
+   * Everybody assigned to this departure, checked against the trip they are
+   * being sent on rather than against nothing.
+   */
+  const assigned = guidesByIds(requirement.assignedGuideIds);
+
+  for (const gid of requirement.assignedGuideIds) {
+    if (!guideById(gid)) {
+      fail(id, "unknown-guide", `assigns "${gid}", who is not on the roster`);
+    }
+  }
+
+  for (const guide of assigned) {
     const held = CERTIFICATION_TIERS.find(
       (t) => t.level === guide.certificationLevel,
     );
@@ -789,14 +808,76 @@ for (const d of departures) {
       fail(
         id,
         "certification-below-route",
-        `assigned guide holds ${guide.certificationLevel}, which does not cover ${d.maxAltitudeM} m`,
+        `${guide.name} holds ${guide.certificationLevel}, which does not cover ${d.maxAltitudeM} m`,
       );
     }
-    if (guide.licenceNumber && guide.status !== "verified") {
+
+    /*
+     * A qualification that lapses mid-trek.
+     *
+     * Checked against `returnsOn`, not `departsOn`. A certificate valid on the
+     * morning you fly to Lukla and expired by the time you are at 5,000 m is
+     * the precise failure an embedded record could not express, and the one
+     * worth having a roster for.
+     */
+    if (!validOn(guide.certificationExpiresOn, d.returnsOn)) {
+      fail(
+        id,
+        "qualification-expires-mid-trip",
+        `${guide.name}'s certification expires ${guide.certificationExpiresOn}, before this trip returns on ${d.returnsOn}`,
+      );
+    }
+    if (
+      guide.wildernessFirstAid &&
+      !validOn(guide.wildernessFirstAid.expiresOn, d.returnsOn)
+    ) {
+      fail(
+        id,
+        "qualification-expires-mid-trip",
+        `${guide.name}'s wilderness first aid expires ${guide.wildernessFirstAid.expiresOn}, before this trip returns on ${d.returnsOn}`,
+      );
+    }
+
+    if (guide.licenceNumber !== "—" && guide.status !== "verified") {
       fail(
         id,
         "unverified-licence-number",
-        `publishes licence number "${guide.licenceNumber}" with status "${guide.status}" — a number on the page is a claim we have checked it`,
+        `publishes licence number "${guide.licenceNumber}" for ${guide.name} with status "${guide.status}" — a number on the page is a claim we have checked it`,
+      );
+    }
+  }
+
+  /*
+   * Enough lead guides for the group the ratio promises.
+   *
+   * `1:8` at a cap of fourteen needs two. Publishing the ratio and staffing
+   * one is the step 8b failure — staff promised and not provided — and it is
+   * only checkable now that guides are a roster rather than a field.
+   */
+  if (assigned.length) {
+    const perGuide = Number(d.guideRatio.split(":")[1]);
+    if (Number.isFinite(perGuide) && perGuide > 0) {
+      const needed = Math.ceil(d.groupSizeMax / perGuide);
+      const leads = assigned.filter((g) => g.role === "lead-guide").length;
+      if (leads < needed) {
+        fail(
+          id,
+          "understaffed-for-ratio",
+          `promises ${d.guideRatio} at a cap of ${d.groupSizeMax}, which needs ${needed} lead guides, and ${leads} ${leads === 1 ? "is" : "are"} assigned`,
+        );
+      }
+    }
+
+    /* And the staffing must agree with what the cost sheet paid for. */
+    const paysAssistant = d.costSheet.lines.some(
+      (l) => l.disposition === "provided" && l.id === "staff-assistant",
+    );
+    const hasAssistant = assigned.some((g) => g.role === "assistant-guide");
+    if (hasAssistant && !paysAssistant) {
+      fail(
+        id,
+        "unfunded-staff",
+        "assigns an assistant guide with no assistant guide line in the cost sheet",
       );
     }
   }
@@ -1279,15 +1360,18 @@ const listings = [
 for (const listing of listings) {
   const source = await readFile(path.join(process.cwd(), listing), "utf8");
   /*
-   * Imports do not count.
+   * A reachable call, not a name.
    *
-   * This looked for the name anywhere in the file, which an unused import
-   * satisfies — deleting the filter and leaving the import behind passed the
-   * check. The mutation test caught it. Import lines are stripped before the
-   * file is searched, so the name has to be used.
+   * The first version of this looked for the name anywhere in the file, which
+   * an unused import satisfies — deleting the filter and leaving the import
+   * behind passed the check. It was then given a local import-stripper, which
+   * fixed this rule and left the same fault in six others. Both now go through
+   * `callsFunction`, which also removes comments and declarations.
    */
-  const body = source.replace(/^import[\s\S]*?from\s+["'][^"']+["'];$/gm, "");
-  if (!/bookableDepartures\(|isBookable\(/.test(body)) {
+  if (
+    !callsFunction(source, "bookableDepartures") &&
+    !callsFunction(source, "isBookable")
+  ) {
     fail(
       "section",
       "bookable-listing",
@@ -1960,6 +2044,64 @@ for (const [theme, set, band] of [
       "flat-zones",
       `${theme} --band-sunk matches the trust band — the two sections read as one surface`,
     );
+  }
+}
+
+/* ---------------------------------------------------------- the roster */
+
+/*
+ * One person cannot be in two places.
+ *
+ * The rule that could not exist while a guide was a field on a departure. Two
+ * overlapping trips with the same lead is not a data-entry curiosity — it is a
+ * trip that will arrive at the trailhead without a guide, discovered on the
+ * day.
+ */
+const assignments = departures.flatMap((d) =>
+  d.guideRequirement.assignedGuideIds.map((gid) => ({
+    guideId: gid,
+    departure: d,
+  })),
+);
+
+for (let i = 0; i < assignments.length; i += 1) {
+  for (let j = i + 1; j < assignments.length; j += 1) {
+    const a = assignments[i];
+    const b = assignments[j];
+    if (a.guideId !== b.guideId) continue;
+    /* Inclusive on both ends: returning the day another trip departs is an
+       overlap, because the guide cannot be in Lukla and Pokhara that morning. */
+    const overlaps =
+      a.departure.departsOn <= b.departure.returnsOn &&
+      b.departure.departsOn <= a.departure.returnsOn;
+    if (!overlaps) continue;
+    fail(
+      a.guideId,
+      "guide-double-booked",
+      `${guideById(a.guideId)?.name ?? a.guideId} is assigned to ${a.departure.id} (${a.departure.departsOn}–${a.departure.returnsOn}) and ${b.departure.id} (${b.departure.departsOn}–${b.departure.returnsOn}), which overlap`,
+    );
+  }
+}
+
+for (const guide of GUIDES) {
+  if (guide.licenceNumber !== "—" && guide.status !== "verified") {
+    fail(
+      guide.id,
+      "unverified-licence-number",
+      `carries licence number "${guide.licenceNumber}" while pending`,
+    );
+  }
+  if (!CERTIFICATION_TIERS.some((t) => t.level === guide.certificationLevel)) {
+    fail(
+      guide.id,
+      "unknown-certification-tier",
+      `holds "${guide.certificationLevel}", which is not a tier on file`,
+    );
+  }
+  for (const word of BANNED_ADJECTIVES) {
+    if (guide.bio.toLowerCase().includes(word.toLowerCase())) {
+      fail(guide.id, "marketing-adjective", `bio uses "${word}"`);
+    }
   }
 }
 

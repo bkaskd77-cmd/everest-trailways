@@ -66,6 +66,8 @@ const ROUTES = [
   "/treks",
   "/regions",
   "/about",
+  "/team",
+  "/contact",
   "/activities",
   "/cancellation",
   "/journal",

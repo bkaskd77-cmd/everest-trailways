@@ -94,7 +94,7 @@ export const trustPoints: TrustPoint[] = [
     body: "You book the team that runs your trek; no departure is subcontracted to an operator we do not name.",
     verify: {
       label: "Meet the guiding team",
-      href: "/about",
+      href: "/team",
       external: false,
     },
     status: "pending",

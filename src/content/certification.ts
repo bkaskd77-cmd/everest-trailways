@@ -49,22 +49,21 @@ export const CERTIFICATION_TIERS: CertificationTier[] = [
   },
 ];
 
-/** A guide we have actually verified. Never invented — see `guideRequirement`. */
-export type AssignedGuide = {
-  name: string;
-  licenceNumber: string;
-  certificationLevel: string;
-  /** ISO date. Wilderness first aid lapses and the page should say when. */
-  wildernessFirstAidExpiry: string;
-  status: "verified" | "pending";
-};
-
 export type GuideRequirement = {
   /** DERIVED from the route's maximum altitude against the tier set. */
   certificationLevel: string;
   /** Composed, in plain terms. Never stored. */
   reason: string;
-  assignedGuide?: AssignedGuide;
+  /**
+   * References into `guides.ts`, not embedded records.
+   *
+   * The embedded version could not answer the three questions that make
+   * publishing a guide worth anything: is this person on two trips at once,
+   * does their certification survive the trip, and is the catalogue staffable
+   * at all. All three need a roster to look across, so the roster is the
+   * entity and this is a reference to it.
+   */
+  assignedGuideIds: string[];
 };
 
 const inForce = (tier: CertificationTier, isoDate: string) =>
@@ -104,7 +103,7 @@ export function tierFor(
 export function guideRequirement(
   maxAltitudeM: number,
   departsOn: string,
-  assignedGuide?: AssignedGuide,
+  assignedGuideIds: string[] = [],
 ): GuideRequirement {
   const tier = tierFor(maxAltitudeM, departsOn);
   const height = maxAltitudeM.toLocaleString("en-GB");
@@ -115,16 +114,6 @@ export function guideRequirement(
     reason: tier
       ? `This route reaches ${height} m, so the guide must hold a certification valid to at least that altitude. ${tier.level} covers up to ${tier.maxAltitudeM.toLocaleString("en-GB")} m.`
       : `This route reaches ${height} m and no certification tier on file covers it. That is a gap in our data, not a permission to run it.`,
-    assignedGuide,
+    assignedGuideIds,
   };
 }
-
-/**
- * Assigned guides, by departure id.
- *
- * Empty on purpose. Every entry here has to be a real person whose licence we
- * hold a copy of, and until the admin panel exists there is no way to enter
- * one that is not a guess. An empty record renders the requirement and the
- * promise; a made-up one would render a lie.
- */
-export const ASSIGNED_GUIDES: Record<string, AssignedGuide> = {};

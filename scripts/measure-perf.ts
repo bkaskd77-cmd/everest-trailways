@@ -185,7 +185,7 @@ const JS_BUDGET: { match: RegExp; budget: number; note: string }[] = [
        * the 280 KB document budget and failed for doing its job. Order matters
        * in this table, so a prefix that has grown a filter has to leave it.
        */
-      /^\/(licences|safety|pricing|cancellation|about|journal|regions)/,
+      /^\/(licences|safety|pricing|cancellation|about|journal|regions|team)/,
     budget: 280,
     note: "static document — no client component of its own",
   },

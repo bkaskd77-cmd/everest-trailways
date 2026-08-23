@@ -7,11 +7,8 @@ import {
 } from "./cost-sheets.ts";
 import { TREKS, type ItineraryDay, type PhysicalDemand } from "./treks.ts";
 import { trekById } from "./trek-pages.ts";
-import {
-  ASSIGNED_GUIDES,
-  type GuideRequirement,
-  guideRequirement,
-} from "./certification.ts";
+import { type GuideRequirement, guideRequirement } from "./certification.ts";
+import { ASSIGNED_GUIDES } from "./guides.ts";
 import type { Focal } from "../lib/image-slots.ts";
 import {
   GALLERIES,
@@ -719,7 +716,7 @@ function compose(seed: Seed): Departure {
     guideRequirement: guideRequirement(
       trek.maxAltitudeM,
       seed.departsOn,
-      ASSIGNED_GUIDES[seed.id],
+      ASSIGNED_GUIDES[seed.id] ?? [],
     ),
     /** Derived: the sum of every provided line, the fee among them. */
     priceUSD: sheetPrice(costSheet),

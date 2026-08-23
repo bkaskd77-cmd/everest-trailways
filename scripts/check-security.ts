@@ -18,6 +18,16 @@
 
 import { execFileSync } from "node:child_process";
 import { readFile, readdir } from "node:fs/promises";
+
+/*
+ * Source is read through these rather than with `includes`.
+ *
+ * Every rule below used to ask whether a NAME appeared in a file. An unused
+ * import satisfies that, and so does a commented-out call — which means a
+ * route could have its rate limiter deleted and still pass, as long as the
+ * import stayed behind. See scripts/lib/source.ts.
+ */
+import { callsFunction, usesIdentifier } from "./lib/source.ts";
 import path from "node:path";
 
 import {
@@ -147,7 +157,7 @@ for (const [file, source] of sources) {
 }
 
 const jsonLd = sources.get("src/components/json-ld.tsx") ?? "";
-if (jsonLd && !jsonLd.includes("jsonLdScript(")) {
+if (jsonLd && !callsFunction(jsonLd, "jsonLdScript")) {
   fail(
     "raw-html",
     "json-ld.tsx no longer serialises through jsonLdScript, so its escaping is gone",
@@ -233,7 +243,7 @@ if (!proxy) {
     "src/proxy.ts is missing — in this version of Next that file, not middleware.ts, is what sets per-request headers",
   );
 }
-if (proxy && !proxy.includes("buildCsp(")) {
+if (proxy && !callsFunction(proxy, "buildCsp")) {
   fail("no-proxy", "src/proxy.ts does not set a Content-Security-Policy");
 }
 
@@ -241,7 +251,7 @@ const config = await readFile(path.join(root, "next.config.ts"), "utf8");
 if (!/poweredByHeader:\s*false/.test(config)) {
   fail("weak-header", "next.config.ts does not remove X-Powered-By");
 }
-if (!config.includes("STATIC_SECURITY_HEADERS")) {
+if (!usesIdentifier(config, "STATIC_SECURITY_HEADERS")) {
   fail("missing-header", "next.config.ts does not attach the static headers");
 }
 
@@ -274,18 +284,18 @@ for (const route of routes) {
     /dynamic\s*=\s*"force-static"/.test(source) &&
     /dynamicParams\s*=\s*false/.test(source);
 
-  if (!prerendered && !source.includes("checkLimit(")) {
+  if (!prerendered && !callsFunction(source, "checkLimit")) {
     fail("unlimited-route", `${route} does not rate limit its callers`);
   }
   // Only routes that accept a body need an input bound.
   const takesBody = /export async function (POST|PUT|PATCH)/.test(source);
-  if (takesBody && !/MAX_BODY_BYTES/.test(source)) {
+  if (takesBody && !usesIdentifier(source, "MAX_BODY_BYTES")) {
     fail(
       "unbounded-input",
       `${route} accepts a body without a maximum size checked before parsing`,
     );
   }
-  if (takesBody && !source.includes("originAllowed(")) {
+  if (takesBody && !callsFunction(source, "originAllowed")) {
     fail("no-origin-check", `${route} accepts a body without an origin check`);
   }
 }

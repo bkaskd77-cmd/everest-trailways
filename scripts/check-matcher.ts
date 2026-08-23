@@ -19,6 +19,8 @@
  */
 
 import { readFile } from "node:fs/promises";
+
+import { callsFunction } from "./lib/source.ts";
 import path from "node:path";
 
 import { departures } from "../src/content/departures.ts";
@@ -432,8 +434,13 @@ const routeSource = await readFile(
   "utf8",
 );
 
-if (!/from "@\/lib\/rate-limit"/.test(routeSource)) {
-  fail("no-rate-limit", "the route does not import the rate limiter");
+/*
+ * Checking the import existed was the weakest possible version of this.
+ * An import is not a use; the call sites below are what actually rate-limit
+ * anybody, and this rule now says so instead of duplicating them.
+ */
+if (!callsFunction(routeSource, "checkLimit")) {
+  fail("no-rate-limit", "the route never calls the rate limiter");
 }
 if (!/checkLimit\("match:ip", ip, MATCH_IP_LIMIT\)/.test(routeSource)) {
   fail("no-rate-limit", "the route does not apply the durable per-IP window");
@@ -441,7 +448,7 @@ if (!/checkLimit\("match:ip", ip, MATCH_IP_LIMIT\)/.test(routeSource)) {
 if (!/checkLimit\("match:session"/.test(routeSource)) {
   fail("no-rate-limit", "the route does not apply the per-session window");
 }
-if (!/maySpend\(\)/.test(routeSource)) {
+if (!callsFunction(routeSource, "maySpend")) {
   fail(
     "no-spend-ceiling",
     "the route does not consult the global daily spend ceiling",

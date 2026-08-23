@@ -33,6 +33,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: url("/activities"), lastModified: now, priority: 0.9 },
     { url: url("/regions"), lastModified: now, priority: 0.6 },
     { url: url("/about"), lastModified: now, priority: 0.5 },
+    { url: url("/team"), lastModified: now, priority: 0.6 },
+    { url: url("/contact"), lastModified: now, priority: 0.6 },
     { url: url("/journal"), lastModified: now, priority: 0.4 },
     { url: url("/plan"), lastModified: now, priority: 0.5 },
 

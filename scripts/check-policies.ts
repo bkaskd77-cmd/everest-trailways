@@ -14,6 +14,8 @@
  */
 
 import { readFile } from "node:fs/promises";
+
+import { callsFunction, executable } from "./lib/source.ts";
 import path from "node:path";
 
 import { BOOKING_ENABLED } from "../src/lib/capabilities.ts";
@@ -155,7 +157,18 @@ for (const p of POLICIES) {
    * second time on this project that a rule has been satisfiable by a leftover
    * definition rather than a use.
    */
-  if (!/robots:\s*policyIsApproved\(/.test(source)) {
+  /*
+   * The gate on `robots`, through the shared reader.
+   *
+   * The first version looked for the helper's name anywhere in the file, which
+   * its own declaration satisfied. The second pinned the exact `robots:`
+   * shape, which worked and was brittle. This asks the real question — is the
+   * helper called at all, and is the robots directive the thing calling it.
+   */
+  if (
+    !callsFunction(source, "policyIsApproved") ||
+    !/robots:\s*policyIsApproved\(/.test(executable(source))
+  ) {
     fail(
       p.id,
       "index-not-gated",
